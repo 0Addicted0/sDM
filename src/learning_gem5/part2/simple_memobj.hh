@@ -29,9 +29,10 @@
 #ifndef __LEARNING_GEM5_PART2_SIMPLE_MEMOBJ_HH__
 #define __LEARNING_GEM5_PART2_SIMPLE_MEMOBJ_HH__
 
+#include "base/statistics.hh"
 #include "mem/port.hh"
 #include "params/SimpleMemobj.hh"
-#include "sim/sim_object.hh"
+#include "sim/clocked_object.hh"
 
 namespace gem5
 {
@@ -42,7 +43,7 @@ namespace gem5
  * This memobj is fully blocking (not non-blocking). Only a single request can
  * be outstanding at a time.
  */
-class SimpleMemobj : public SimObject
+class SimpleMemobj : public ClockedObject
 {
   private:
 
@@ -229,6 +230,19 @@ class SimpleMemobj : public SimObject
 
     /// True if this is currently blocked waiting for a response.
     bool blocked;
+    //+by yqy
+    const Cycles latency;
+
+  //+by yqy
+  protected:
+    struct SimpleMemobjStats : public statistics::Group
+    {
+        SimpleMemobjStats(statistics::Group *parent);
+        statistics::Scalar hits;
+        //statistics::Scalar misses;
+        //statistics::Histogram Latency;
+        //statistics::Formula hitRatio;
+    } stats;
 
   public:
 

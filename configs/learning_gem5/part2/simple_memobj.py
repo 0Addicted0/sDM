@@ -47,7 +47,7 @@ system.clk_domain.voltage_domain = VoltageDomain()
 
 # Set up the system
 system.mem_mode = "timing"  # Use timing accesses
-system.mem_ranges = [AddrRange("512MB")]  # Create an address range
+system.mem_ranges = [AddrRange(0x0, size="128MB")]  # Create an address range
 
 # Create a simple CPU
 system.cpu = X86TimingSimpleCPU()
@@ -90,6 +90,7 @@ binpath = os.path.join(
 )
 # cmd is a list which begins with the executable (like argv)
 process.cmd = [binpath]
+process.pool_ids = [0]
 # Set the cpu to use the process as its workload and create thread contexts
 system.cpu.workload = process
 system.cpu.createThreads()

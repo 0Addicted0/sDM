@@ -675,6 +675,7 @@ class MemCtrl : public qos::MemCtrl
 
   public:
 
+
     MemCtrl(const MemCtrlParams &p);
 
     /**
