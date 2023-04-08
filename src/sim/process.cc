@@ -155,6 +155,11 @@ Process::Process(const ProcessParams &params, EmulationPageTable *pTable,
      */
     _tgid = params.pid;
 
+    printf("process.cc [construct] pool: ");
+    for(int pool_id: pool_ids)
+        printf("%d ",pool_id);
+    printf("\n");
+
     exitGroup = new bool();
     sigchld = new bool();
 

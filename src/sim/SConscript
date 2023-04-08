@@ -140,5 +140,6 @@ DebugFlag('VoltageDomain')
 DebugFlag('DVFS')
 DebugFlag('Vma')
 DebugFlag('PowerDomain')
+DebugFlag('MemPoolAlloc')#+by yqy:print mem_pools allocation
 
 CompoundFlag('SyscallAll', [ 'SyscallBase', 'SyscallVerbose'])

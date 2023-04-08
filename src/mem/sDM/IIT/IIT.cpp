@@ -1,6 +1,16 @@
 #include "IIT.hh"
 
-/**
-* 这里需要实现XXXhash(), 计算校验和
-*
-*/
+namespace gem5
+{
+    namespace sDM
+    {
+        /**
+         * @author yqy
+         * @brief 比较计数器a和b
+         */
+        bool counter_cmp(CL_Counter a, CL_Counter b)
+        {
+            return strncmp((const char *)a, (const char *)b, sizeof(CL_Counter)) == 0;
+        }
+    }
+}

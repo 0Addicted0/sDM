@@ -195,7 +195,7 @@ system = System(
     mem_mode=test_mem_mode,
     mem_ranges=[
         AddrRange(args.mem_size),
-        # AddrRange(0x10000000000,size=args.mem_size) # Add a new test memory
+        AddrRange(0x10000000000, size=args.mem_size),  # Add a new test memory
     ],
     cache_line_size=args.cacheline_size,
 )

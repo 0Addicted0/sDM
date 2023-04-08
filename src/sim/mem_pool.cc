@@ -144,8 +144,13 @@ MemPool::unserialize(CheckpointIn &cp)
 void
 MemPools::populate(const AddrRangeList &memories)
 {
+    int cnt = 0;
     for (const auto &mem : memories)
+    {
         pools.emplace_back(pageShift, mem.start(), mem.end());
+        // +by yqy:to check mem_pool & addrange
+        printf("mem_pool.cc [poplulate]%d:%lx->%lx\n",cnt++,mem.start(),mem.end());
+    }
 }
 
 Addr

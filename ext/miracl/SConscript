@@ -1,0 +1,127 @@
+
+# -*- mode:python -*-
+
+# Copyright (c) 2020 StreamComputing Corp.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met: redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer;
+# redistributions in binary form must reproduce the above copyright
+# notice, this list of conditions and the following disclaimer in the
+# documentation and/or other materials provided with the distribution;
+# neither the name of the copyright holders nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# Authors: Kai Ren
+
+import os
+
+Import('env')
+
+# mir_env = env.Clone()
+# if mir_env['GCC']:
+#     mir_env.Append(CCFLAGS=['-Wno-unused-variable',
+#                            '-Wno-unused-label',
+#                            '-Wno-implicit-fallthrough',
+#                            '-g'])
+
+# elif mir_env['CLANG']:
+#     mir_env.Append(CCFLAGS=['-Wno-unused-variable',
+#                            '-Wno-unused-label',
+#                            '-g'])
+
+# Add the appropriate files for the library
+
+# miracl_files = []
+'''
+def MiraclFile(filename):
+    miracl_files.append(File('./' + filename))
+
+MiraclFile('mrcore.c')
+MiraclFile('mrarth0.c')
+MiraclFile('mrarth1.c')
+MiraclFile('mrarth2.c')
+MiraclFile('mralloc.c')
+MiraclFile('mrmonty.c')
+MiraclFile('mrpower.c')
+MiraclFile('mrsroot.c')
+MiraclFile('mrlucas.c')
+MiraclFile('mrzzn2.c')
+MiraclFile('mrzzn2b.c')
+MiraclFile('mrzzn3.c')
+MiraclFile('mrecn2.c')
+MiraclFile('mrsmall.c')
+MiraclFile('mrround.c')
+MiraclFile('mrio1.c')
+MiraclFile('mrio2.c')
+MiraclFile('mrgcd.c')
+MiraclFile('mrjack.c')
+MiraclFile('mrxgcd.c')
+MiraclFile('mrarth3.c')
+MiraclFile('mrbits.c')
+MiraclFile('mrrand.c')
+MiraclFile('mrprime.c')
+MiraclFile('mrcrt.c')
+MiraclFile('mrscrt.c')
+MiraclFile('mrshs.c')
+MiraclFile('mrshs256.c')
+MiraclFile('mrshs512.c')
+MiraclFile('mrsha3.c')
+MiraclFile('mrfpe.c')
+MiraclFile('mraes.c')
+MiraclFile('mrgcm.c')
+MiraclFile('mrstrong.c')
+MiraclFile('mrbrick.c')
+MiraclFile('mrebrick.c')
+MiraclFile('mrec2m.c')
+MiraclFile('mrgf2m.c')
+MiraclFile('mrcurve.c')
+MiraclFile('mrfast.c')
+MiraclFile('mrfrnd.c')
+MiraclFile('mrflash.c')
+MiraclFile('mrdouble.c')
+MiraclFile('mrbuild.c')
+MiraclFile('mrflsh1.c')
+MiraclFile('mrpi.c')
+MiraclFile('mrflsh2.c')
+MiraclFile('mrflsh3.c')
+MiraclFile('mrflsh4.c')
+MiraclFile('big.cpp')
+MiraclFile('zzn.cpp')
+MiraclFile('ecn.cpp')
+MiraclFile('ec2.cpp')
+MiraclFile('flash.cpp')
+MiraclFile('crt.cpp')
+MiraclFile('bmark.c')
+MiraclFile('fact.c')
+MiraclFile('mersenne.cpp')
+MiraclFile('brent.cpp')
+MiraclFile('sample.cpp')
+MiraclFile('ecsgen.cpp') 
+MiraclFile('ecsign.cpp')
+MiraclFile('ecsver.cpp')
+MiraclFile('polymod.cpp')
+MiraclFile('poly.cpp')
+MiraclFile('schoof.cpp')
+
+env.Library('miracl', [env.SharedObject(f) for f in miracl_files])
+'''
+
+env.Prepend(CPPPATH=Dir('./include'))
+env.Append(LIBS=['libmiracl.a'])
+env.Prepend(LIBPATH=[Dir('.')])

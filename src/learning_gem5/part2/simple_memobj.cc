@@ -35,11 +35,12 @@ namespace gem5
 {
 
 SimpleMemobj::SimpleMemobj(const SimpleMemobjParams &params) :
-    SimObject(params),
+    ClockedObject(params),//+by yqy
+    latency(params.latency),//+by yqy
     instPort(params.name + ".inst_port", this),
     dataPort(params.name + ".data_port", this),
     memPort(params.name + ".mem_side", this),
-    blocked(false)
+    blocked(false),stats(this)//+by yqy
 {
 }
 
@@ -102,6 +103,7 @@ bool
 SimpleMemobj::CPUSidePort::recvTimingReq(PacketPtr pkt)
 {
     // Just forward to the memobj.
+
     if (!owner->handleRequest(pkt)) {
         needRetry = true;
         return false;
@@ -177,8 +179,18 @@ SimpleMemobj::handleRequest(PacketPtr pkt)
     // This memobj is now blocked waiting for the response to this packet.
     blocked = true;
 
+    // +by yqy
+    stats.hits++;// 增加响应统计量
+
+    // Packet
+
+    // +by yqy
+	schedule(new EventFunctionWrapper([this, pkt]{ memPort.sendPacket(pkt); },
+                                      name() + ".sendEvent", true),
+             clockEdge(latency));
+
     // Simply forward to the memory port
-    memPort.sendPacket(pkt);
+    // memPort.sendPacket(pkt);
 
     return true;
 }
@@ -232,4 +244,17 @@ SimpleMemobj::sendRangeChange()
     dataPort.sendRangeChange();
 }
 
+//+by yqy
+SimpleMemobj::SimpleMemobjStats::SimpleMemobjStats(statistics::Group *parent)
+      : statistics::Group(parent),
+      ADD_STAT(hits, statistics::units::Count::get(), "Number of access")
+      //ADD_STAT(misses, statistics::units::Count::get(), "Number of misses"),
+      //ADD_STAT(Latency, statistics::units::Tick::get(),
+      //         "Ticks for misses to the memobj"),
+      //ADD_STAT(hitRatio, statistics::units::Ratio::get(),
+               //"The ratio of hits to the total accesses to the memobj",
+               //hits / (hits + misses))
+{
+    //Latency.init(16); // number of buckets
+}
 } // namespace gem5
