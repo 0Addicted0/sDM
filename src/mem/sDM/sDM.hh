@@ -25,6 +25,7 @@
 #include <cstring>
 #include <vector>
 
+#include "src/sim/mem_pool.hh"
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -45,7 +46,7 @@ namespace gem5
         typedef uint8_t *sdm_dataPtr;              // 数据区指针
         typedef uint8_t sdm_hashKey[SM4_KEY_SIZE]; // sdm空间密钥
         typedef uint8_t sdm_CMEKey[SM3_KEY_SIZE];  // sdm hash密钥
-        typedef uint8_t sdm_HMACPtr[HMAC_SIZE];    // 一个SM3 HASH 256bit
+        typedef uint8_t sdm_HMAC[HMAC_SIZE];       // 一个SM3 HASH 256bit
         typedef uint8_t CL[CL_SIZE];
         uint64_t ceil(uint64_t a, uint64_t b);
         uint64_t getIITsize(uint64_t data_size);
@@ -61,7 +62,8 @@ namespace gem5
         typedef struct _pagePtrPair
         {
             Addr curPageAddr;
-            uint32_t pnum, cnum;
+            uint32_t pnum; // 该空间到此页面(不含)的页面数量
+            uint32_t cnum; // 包含该地址其后连续的页面数量(>=1)
         } sdm_pagePtrPair;
         typedef sdm_pagePtrPair *sdm_pagePtrPairPtr;
         /**
@@ -74,47 +76,13 @@ namespace gem5
          * @author
          * yqy
          */
-        typedef struct _sdm_dataPagePtrPage
-        {
-            sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1]; // 0 ~ PAGE_SIZE / PAIR_SIZE - 1 - 1
-            sdmIDtype reserved;                              // 保留,本页存储的数据页面指针集所属的sdm编号
-            sdm_dataPtr next;                                // 指向下一个存放数据页面指针集合的本地物理页
-            /**
-             * @author yqy
-             * @brief 返回本页存储的数据页面指针集的最大地址范围
-             * @brief 用于查找地址所在页的物理地址
-             * @param 本页首地址
-             * @attention 需要接入Packet
-             */
-            Addr getMaxBound(Addr paddr)
-            {
-                // 构造Packet访问 pair[PAGE_SIZE / PAIR_SIZE - 1 - 1]
-                // addr: paddr + (PAGE_SIZE / PAIR_SIZE - 1 - 1) * PAIR_SIZE;
-                // 构造packet并访问
-                // ...
-                // 假设得到的结果存储在rbound中
-                sdm_pagePtrPair rbound;
-                Addr p = rbound.curPageAddr + (rbound.cnum * PAGE_SIZE) - 1;
-                return p;
-            }
-        } sdm_dataPagePtrPage;
-        typedef sdm_dataPagePtrPage *sdm_dataPagePtrPagePtr;
-
-        /**
-         * @brief
-         * 为解决HMAC在远端内存物理上可能不连续
-         * @attention 本地申请来存放这些不连续页的指针集的物理空间本身也可能不连续
-         * @attention 因为我们并不阻止节点使用本地DRAM
-         * @author
-         * yqy
-         */
-        typedef struct _sdm_hmacPagePtrPage
-        {
-            sdmIDtype id;     // 保留,本页存储的HMAC数据页面指针集所属的sdm编号
-            sdm_dataPtr next; // 指向下一个存放数据页面指针集合的本地物理页
-            sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1];
-        } sdm_hmacPagePtrPage;
-        typedef sdm_hmacPagePtrPage *sdm_hmacPagePtrPagePtr;
+        // typedef struct _sdm_dataPagePtrPage
+        // {
+        //     sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1]; // 0 ~ PAGE_SIZE / PAIR_SIZE - 1 - 1
+        //     sdmIDtype reserved;                              // 保留,本页存储的数据页面指针集所属的sdm编号
+        //     sdm_dataPtr next;                                // 指向下一个存放数据页面指针集合的本地物理页
+        // } sdm_dataPagePtrPage;
+        // typedef sdm_dataPagePtrPage *sdm_dataPagePtrPagePtr;
 
         /**
          * @brief
@@ -124,14 +92,48 @@ namespace gem5
          * @author
          * yqy
          */
-        typedef struct _sdm_iitNodePagePtrPage
+        // typedef struct _sdm_iitNodePagePtrPage
+        // {
+        //     sdmIDtype id;     // 保留,本页存储的HMAC数据页面指针集所属的sdm编号
+        //     sdm_dataPtr next; // 指向下一个存放数据页面指针集合的本地物理页
+        //     sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1];
+        // } sdm_iitNodePagePtrPage;
+        // typedef sdm_iitNodePagePtrPage *sdm_iitNodePagePtrPagePtr;
+
+        /**
+         * @brief 为解决HMAC/IIT在远端内存物理上可能不连续
+         * @author yqy
+         * @attention 本地申请来存放这些不连续页的指针集的物理空间本身也可能不连续
+         * @attention因为我们并不阻止节点使用本地DRAM
+         * @attention 合并了前面两个结构
+         */
+        typedef struct _sdm_PagePtrPage
         {
-            sdmIDtype id;     // 保留,本页存储的HMAC数据页面指针集所属的sdm编号
-            sdm_dataPtr next; // 指向下一个存放数据页面指针集合的本地物理页
-            sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1];
-        } sdm_iitNodePagePtrPage;
+            // 默认为两级
+            union
+            {
+                sdm_dataPtr next[(PAGE_SIZE / sizeof(sdm_dataPtr)) - 2]; // 指向下一个存放数据页面指针集合的本地物理页
+                sdm_pagePtrPair pair[(PAGE_SIZE / PAIR_SIZE) - 1];       // 剩余可用pair数
+            };
+            uint64_t c; // 本地页连续数量
+            uint64_t reserved;
+        } sdm_PagePtrPage;
+        typedef sdm_PagePtrPage *sdm_PagePtrPagePtr;
+        typedef sdm_PagePtrPage sdm_hmacPagePtrPage;
+        typedef sdm_PagePtrPage sdm_iitNodePagePtrPage;
+        typedef sdm_hmacPagePtrPage *sdm_hmacPagePtrPagePtr;
         typedef sdm_iitNodePagePtrPage *sdm_iitNodePagePtrPagePtr;
 
+        /**
+         * @author yqy
+         * @brief 用于记录申请的物理空间块
+         */
+        typedef struct _phy_space_block
+        {
+            Addr start;
+            int npages;
+        } phy_space_block;
+        typedef phy_space_block *phy_space_blockPtr;
         /**
          * 单个sdm的metadata结构如下
          * |metadata|
@@ -141,17 +143,20 @@ namespace gem5
          */
         typedef struct _sdm_space
         {
-            sdmIDtype id;                            // 每个space拥有唯一id,用于避免free-malloc counter重用问题
-            sdm_size sDataSize;                      // 数据空间大小字节单位
-            sdm_dataPagePtrPagePtr dataPtrPagePtr;   // 数据物理页地址集指针
-            sdm_hmacPagePtrPagePtr HMACPtrPagePtr;   // HMAC页指针集指针
+            sdmIDtype id;                          // 每个space拥有唯一id,用于避免free-malloc counter重用问题
+            sdm_size sDataSize;                    // 数据空间大小字节单位
+            Addr datavAddr;                        // 数据虚拟地址起始
+            sdm_hmacPagePtrPagePtr HMACPtrPagePtr; // HMAC页指针集指针
+            int hmac_skip;
             sdm_iitNodePagePtrPagePtr iITPtrPagePtr; // 完整性树页指针集指针
-            // iit_root Root;                        // 当前空间树Root
+            int iit_skip;
+            // iit_root Root;                        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
             sdm_hashKey iit_key; // 当前空间完整性树密钥
             sdm_CMEKey cme_key;  // 当前空间内存加密密钥
             /**
              * @brief 返回解密的密钥
              * @param key_type 需要返回的密钥标识:HASH_KEY_TYPE,CME_KEY_TYPE
+             * @param key 接收key的指针
              * @attention 未实现
              */
             void key_get(int key_type, uint8_t *key)
@@ -174,7 +179,7 @@ namespace gem5
          */
         typedef struct _sdm_page_hmac
         {
-            sdm_HMACPtr hmac[CL_SIZE / HMAC_SIZE];
+            sdm_HMAC hmac[CL_SIZE / HMAC_SIZE];
 
             uint8_t *high() // 高半页的HMAC
             {
@@ -205,11 +210,19 @@ namespace gem5
         private:
             // 数据页页指针集指针
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
-            std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
-            sdmIDtype sdm_space_cnt;                         // 全局单增,2^64永远不会耗尽, start from 1
-            int sdm_pool_id;                                 // 可用本地内存池(内存段)编号
-            std::vector<sdm_space> sdm_table;                // id->sdm
-            std::unordered_map<Addr, uint64_t> sdm_paddr2id; // paddr -> id
+            // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
+            sdmIDtype sdm_space_cnt;                                                          // 全局单增,2^64永远不会耗尽, start from 1
+            int remote_pool_id;                                                               // 可用本地内存池(内存段)编号
+            int local_pool_id;                                                                // 记录每个process/workload的本地pool的编号
+            MemPools *mem_pools;                                                              // 实例化时的内存池指针
+            std::vector<sdm_space> sdm_table;                                                 // id->sdm
+            std::unordered_map<Addr, uint64_t> sdm_paddr2id;                                  // paddr -> id
+            bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
+            void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list, int skip, int ac_num);
+            void write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
+            void read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
+            bool hmac_verify(Addr paddr, iit_NodePtr counter, sdm_hashKey hash_key);
+            Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
 
         public:
             sDMmanager(int sdm_pool_id);

@@ -118,7 +118,7 @@ namespace gem5
          * @param inputLen 输入消息字节长度
          * @param hamc_key 用于计算hmac的密钥
          * @param paddr    输入消息的物理地址
-         * @param counter  512bit(含有部分填充0)的计数器指针
+         * @param counter  512bit(含有部分填充0)的节点指针
          * @param counterLen 计数器字节长度
          * @param hmac     计算结果存储指针
          * @param hmacLen  输出字节长度

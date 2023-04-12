@@ -15,8 +15,11 @@ namespace gem5
         typedef uint16_t iit_minor_counter;
         typedef uint16_t iit_leaf_minor_counter;
         typedef uint8_t iit_mid_minor_counter;
-        // 可以统一存下一个叶/中间节点的某个计数器:包含主计数器+副计数器
-        // 第2B是副计数器,高8B是主计数器
+        /*
+        CL_Counter:
+            1. 可以统一存下一个叶/中间节点的某个计数器:包含主计数器+副计数器
+            2. 第[0]开始是2byte的副计数器,[sizeof(iit_minor_counter)]开始是高8byte是主计数器
+        */
         typedef uint8_t CL_Counter[sizeof(iit_major_counter) + sizeof(iit_minor_counter)];
         typedef uint8_t _iit_mid_node[CL_SIZE];
         typedef uint16_t _iit_leaf_node[CL_SIZE >> 1];
@@ -73,8 +76,9 @@ namespace gem5
             {
                 assert((iit_node_type == IIT_LEAF_TYPE || iit_node_type == IIT_MID_TYPE) && "undefined type of node");
             }
+
             /**
-             * @author yqy
+             * @author yqy|psj|ys
              * @brief  从节点中提取出hash_tag
              * @return 返回提取出的hash_tag
              */
@@ -87,7 +91,8 @@ namespace gem5
                     uint16_t scanner;
                     for (int i = IIT_LEAF_ARITY - 1; i >= 0; i--)
                     {
-                        scanner = (leafNode[i]) & IIT_LEAF_NODE_HASH_TAG_MASK;
+                        scanner = ((leafNode[i]) & IIT_LEAF_NODE_HASH_TAG_MASK) >>
+                                  (BYTE2BIT * sizeof(iit_leaf_minor_counter) - IIT_LEAF_NODE_EMB); // 美妙的左移
                         hash_tag = (hash_tag << IIT_LEAF_NODE_EMB) | scanner;
                     }
                 }
@@ -96,7 +101,8 @@ namespace gem5
                     uint8_t scanner;
                     for (int i = IIT_MID_ARITY - 1; i >= 0; i--)
                     {
-                        scanner = (midNode[i]) & IIT_MID_NODE_HASH_TAG_MASK;
+                        scanner = ((midNode[i]) & IIT_MID_NODE_HASH_TAG_MASK) >>
+                                  ((BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB)); // 美妙的左移
                         hash_tag = (hash_tag << IIT_MID_NODE_EMB) | scanner;
                     }
                 }
@@ -104,7 +110,7 @@ namespace gem5
             }
 
             /**
-             * @author yqy
+             * @author yqy|psj|ys
              * @brief 从节点中提取出主计数器
              * @return 返回计算得到的主计数器
              */
@@ -118,8 +124,10 @@ namespace gem5
                     iit_leaf_minor_counter scanner;
                     for (int i = IIT_LEAF_ARITY - 1; i >= 0; i--)
                     {
-                        scanner = (leafNode[i]) & IIT_LEAF_NODE_MAJOR_MASK; // 取出该unit中嵌入的部分位
-                        major = (major << IIT_LEAF_NODE_EMB) | scanner;     // 拼接
+                        scanner = ((leafNode[i]) & IIT_LEAF_NODE_MAJOR_MASK) >>
+                                  (BYTE2BIT * sizeof(iit_leaf_minor_counter) - IIT_LEAF_NODE_EMB * 2); // 取出该unit中嵌入的部分位
+                                                                                                       // 美妙的左移
+                        major = (major << IIT_LEAF_NODE_EMB) | scanner;                                // 拼接
                     }
                 }
                 else
@@ -127,8 +135,10 @@ namespace gem5
                     iit_mid_minor_counter scanner;
                     for (int i = IIT_MID_ARITY - 1; i >= 0; i--)
                     {
-                        scanner = (midNode[i]) & IIT_MID_NODE_MAJOR_MASK; // 取出该unit中嵌入的部分位
-                        major = (major << IIT_MID_NODE_EMB) | scanner;    // 拼接
+                        scanner = ((midNode[i]) & IIT_MID_NODE_MAJOR_MASK) >>
+                                  ((BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB * 2)); // 取出该unit中嵌入的部分位
+                                                                                                       // 美妙的左移
+                        major = (major << IIT_MID_NODE_EMB) | scanner;                                 // 拼接
                     }
                 }
                 return major;
@@ -186,6 +196,7 @@ namespace gem5
                     }
                 }
             }
+
             /**
              * @author yqy
              * @brief 将第minor计数器的值写入第k个unit
@@ -202,6 +213,7 @@ namespace gem5
                     midNode[k] = (midNode[k] & (IIT_MID_NODE_MAJOR_MASK | IIT_MID_NODE_HASH_TAG_MASK)) | minor;
                 }
             }
+
             /**
              * @author yqy
              * @brief 将major_counter采用小段模式嵌入到节点中
@@ -234,6 +246,7 @@ namespace gem5
                     }
                 }
             }
+
             /**
              * @brief 计算hash_tag
              * @author yqy
@@ -255,6 +268,7 @@ namespace gem5
                               paddr, counter, sizeof(iit_hash_tag), (uint8_t *)(&hash_tag), sizeof(iit_hash_tag));
                 return hash_tag;
             }
+
             /**
              * @brief 将当节点置为0,并给出正确的hash_tag
              * @author yqy
@@ -266,6 +280,7 @@ namespace gem5
                 iit_hash_tag hash_tag = get_hash_tag(iit_node_type, hash_tag_key, paddr);
                 embed_hash_tag(iit_node_type, hash_tag);
             }
+
             /**
              * @author yqy
              * @paramiit_node_type 节点类型
@@ -279,6 +294,7 @@ namespace gem5
                 iit_hash_tag hash_tag = get_hash_tag(iit_node_type, hash_tag_key, paddr);
                 return hash_tag == INVALID_NODE ? false : true;
             }
+
             /**
              * @author yqy
              * @brief 返回第k个计数器:主计数器+副计数器,用存储到CL_Counter结构中(64bit+16bit)
@@ -293,11 +309,11 @@ namespace gem5
                 *((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) = major;
                 if (iit_node_type == IIT_LEAF_TYPE)
                 {
-                    *((iit_minor_counter *)counter) = (leafNode[k] & IIT_LEAF_NODE_MAJOR_MASK);
+                    *((iit_minor_counter *)counter) = (leafNode[k] & IIT_LEAF_MINOR_RESERVED_MASK);
                 }
                 else
                 {
-                    *((iit_minor_counter *)counter) = (midNode[k] & IIT_MID_NODE_MAJOR_MASK);
+                    *((iit_minor_counter *)counter) = (midNode[k] & IIT_MID_MINOR_RESERVED_MASK);
                 }
             }
 
@@ -315,9 +331,10 @@ namespace gem5
                 else
                     leafNode[k] &= (IIT_MID_NODE_HASH_TAG_MASK | IIT_MID_NODE_MAJOR_MASK);
             }
+            // need review
             /**
              * @brief 给第k个计数器增加1
-             * @author yqy
+             * @author yqy|psj
              * @param OF记录是否发生溢出,用于引发页面重加密和HMAC刷新
              * @attention 未完全实现
              */
@@ -350,24 +367,42 @@ namespace gem5
                         assert(*((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) != 0 && "Major counter overflow");
                     }
                 }
-                if (OF) // 副计数器溢出
-                    embed_major(iit_node_type, *((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) + 1);
+                // if (OF)                                                                                            // 副计数器溢出
+                //     embed_major(iit_node_type, *((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) + 1); //+1？（上面判断的时候，major不是溢出加1了吗），不知道是不是有问题
+                // 是的这里不应该再+1了
                 embed_minor_k(iit_node_type, *((iit_minor_counter *)(counter)), k);
             }
+
+            // need review
             /**
-             * @author:yqy
+             * @author yqy|psj
              * @param iit_node_type 当前节点类型
              * @param container (CL_Counter)结果计数器
              * @attention 结果计数器格式为中间节点
-             * @brief:求当前节点的和,并转换为mid类型的节点写入指针参数中
+             * @brief 求当前节点的和,并转换为mid类型的节点写入指针参数中
              */
+            // psj:就整个函数都有点迷惑，我觉得应该是下面这样的
             void sum(int iit_node_type, CL_Counter container, int dest_iit_node_type = IIT_MID_ARITY)
             {
                 iit_major_counter major = abstract_major(iit_node_type);
                 iit_major_counter minor = 0x0;
+                /**
+                 * leaf
+                 * -----------------------------
+                 * |-----major-----|---minor---|
+                 * -----------------------------
+                 * mid
+                 * -----------------------------
+                 * |---------major-------|minor|
+                 * -----------------------------
+                 */
                 if (iit_node_type == IIT_LEAF_TYPE)
                 {
+                    // leaf的major是每+1,表示写了(1<<IIT_LEAF_MINOR_BIT_SIZE)次
+                    // mid的major是每+1,表示写了(1<<IIT_MID_MINOR_BIT_SIZE)次
+                    // 因此每个leaf中的1是mid中的1<<(IIT_LEAF_MINOR_BIT_SIZE - IIT_MID_MINOR_BIT_SIZE)倍
                     major <<= (IIT_LEAF_MINOR_BIT_SIZE - IIT_MID_MINOR_BIT_SIZE);
+                    // 先以leaf的格式累加起来
                     for (int i = 0; i < IIT_LEAF_ARITY; i++)
                         minor += ((leafNode[i]) & IIT_LEAF_MINOR_RESERVED_MASK);
                 }
@@ -375,7 +410,6 @@ namespace gem5
                 {
                     for (int i = 0; i < IIT_MID_ARITY; i++)
                         minor += ((leafNode[i]) & IIT_MID_MINOR_RESERVED_MASK);
-                    minor &= (1 << IIT_LEAF_MINOR_BIT_SIZE);
                 }
                 // switch (dest_iit_node_type)
                 // {
@@ -385,6 +419,7 @@ namespace gem5
                 //     break;
                 // case IIT_MID_TYPE:
                 // 中间节点计数器更快溢出
+                // 转换到mid格式上
                 major += (minor / (IIT_MID_MINOR_MAXM + 1));
                 minor &= ((1 << IIT_MID_MINOR_BIT_SIZE) - 1);
                 // break;

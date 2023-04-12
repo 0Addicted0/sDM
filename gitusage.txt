@@ -1,9 +1,11 @@
-git checkout -b xxx-your-branch
-git add xxx
+git add .
 git commit --no-verify -m "your modify message/log"
-git push orgin xxx-your-branch
+git push orgin sdm-dev
 
-git remote set-url origin xxxURL
+0Addicted0
+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
+
 git reset --soft HEAD^
 
-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
+git remote set-url origin xxxURL
+git checkout -b xxx-your-branch
