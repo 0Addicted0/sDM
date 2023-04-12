@@ -10,6 +10,7 @@
 #define PAGE_ALIGN_MASK 0xfffffffffffff000 // 转换为页面对齐地址  , +by psj:PAGE mask错误
 #define HMAC_SIZE (SM3_len >> 3)           // SM3
 #define PAIR_SIZE 16                       // ptr+num(8+8) 数据页指针集合二元组的大小
+#define SKIP_SIZE 16
 
 #define IIT_NODE_SIZE 64 // 64B = 512 bit = CacheLine_Size
 // #define IIT_MAJOR_COUNTER_SIZE 8 // 主计数器64bit = 8B

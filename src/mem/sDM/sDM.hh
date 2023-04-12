@@ -25,7 +25,8 @@
 #include <cstring>
 #include <vector>
 
-#include "src/sim/mem_pool.hh"
+#include "../../sim/mem_pool.hh"
+#include "../../packet.hh"
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -101,6 +102,26 @@ namespace gem5
         // typedef sdm_iitNodePagePtrPage *sdm_iitNodePagePtrPagePtr;
 
         /**
+         * @author yqy
+         * @brief skip list的结构
+         * @brief 16Byte
+         */
+        typedef struct _skip_list_jmp
+        {
+            Addr next;     // 连续段页面首地址
+            Addr maxBound; // 连续页面段的最大地址
+        } skip_jmp;
+        /**
+         * @author yqy
+         * @brief skip list的结构
+         * @brief 16Byte
+         */
+        typedef struct _skip_list_jmp_local
+        {
+            uint64_t con;  // 连续页面段后还有几个页面(包含当前页面)
+            Addr maxBound; // 连续页面段的最大地址
+        } local_jmp;
+        /**
          * @brief 为解决HMAC/IIT在远端内存物理上可能不连续
          * @author yqy
          * @attention 本地申请来存放这些不连续页的指针集的物理空间本身也可能不连续
@@ -112,11 +133,10 @@ namespace gem5
             // 默认为两级
             union
             {
-                sdm_dataPtr next[(PAGE_SIZE / sizeof(sdm_dataPtr)) - 2]; // 指向下一个存放数据页面指针集合的本地物理页
-                sdm_pagePtrPair pair[(PAGE_SIZE / PAIR_SIZE) - 1];       // 剩余可用pair数
+                skip_jmp jmp[(PAGE_SIZE / SKIP_SIZE) - 1];         // 指向下一个存放数据页面指针集合的本地物理页,jmp[i]表示其后第2^(i[0,...])个连续段
+                sdm_pagePtrPair pair[(PAGE_SIZE / PAIR_SIZE) - 1]; // 剩余可用pair数
             };
-            uint64_t c; // 本地页连续数量
-            uint64_t reserved;
+            local_jmp cur_segMax; // 当前连续页段的最大,此结构中的next保留未用
         } sdm_PagePtrPage;
         typedef sdm_PagePtrPage *sdm_PagePtrPagePtr;
         typedef sdm_PagePtrPage sdm_hmacPagePtrPage;
@@ -138,7 +158,7 @@ namespace gem5
          * 单个sdm的metadata结构如下
          * |metadata|
          * |         -------------------\
-         * |                             ------------------------------------\
+         * |                             -----------------------------------\
          * |-数据空间大小-|-数据页指针链表头-|-HMAC指针链表头-|-完整性树指针链表头-|
          */
         typedef struct _sdm_space
@@ -218,7 +238,7 @@ namespace gem5
             std::vector<sdm_space> sdm_table;                                                 // id->sdm
             std::unordered_map<Addr, uint64_t> sdm_paddr2id;                                  // paddr -> id
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
-            void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list, int skip, int ac_num);
+            void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list, int skip, int ac_num, int lnpages);
             void write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
             void read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
             bool hmac_verify(Addr paddr, iit_NodePtr counter, sdm_hashKey hash_key);
@@ -231,9 +251,9 @@ namespace gem5
             bool sDMspace_register(std::vector<Addr> &pageList);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
-            void read(Addr paddr);
             bool verify(Addr paddr, sdmIDtype id, Addr *rva, int &h, Addr *keyPathAddr, iit_NodePtr keyPathNode, sdm_hashKey key);
-            void write(Addr paddr);
+            void write(PacketPtr pkt);
+            void read(PacketPtr pkt);
         };
     }
 }
