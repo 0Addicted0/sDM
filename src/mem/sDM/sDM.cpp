@@ -42,6 +42,7 @@ namespace gem5
         }
         /**
          * sDMmanager构造函数
+         * @attention 待传入参数*
          */
         sDMmanager::sDMmanager(int sdm_pool_id) : remote_pool_id(remote_pool_id)
         {
@@ -53,6 +54,57 @@ namespace gem5
         sDMmanager::~sDMmanager()
         {
         }
+        /**
+         * @author yqy
+         * @brief 将连续数据写入到gem5内存中
+         * @param byte_size 写入字节大小
+         * @param data 数据指针
+         * @param gem5_addr 写入的位置
+         * @attention 未实现*
+         * @attention 注意可能需要将地址按CL对齐后再读写
+         */
+        void sDMmanager::write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
+        {
+            //  packet mem[i]->gem5MemPtr->[i];...
+            return;
+        }
+        /**
+         * @author yqy
+         * @brief 从gem5内存中读取连续数据
+         * @param byte_size 读取字节大小
+         * @param container 存放读取数据指针
+         * @param gem5_addr 读取的位置
+         * @attention 未实现*
+         * @attention 注意可能需要将地址按CL对齐后再读写
+         */
+        void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
+        {
+            // container <- packet[byte_size];
+            return;
+        }
+        /**
+         * @author yqy
+         * @brief 用于申请一定大小的物理空间,用于存储sdm管理结构
+         * @param npages 申请空间的页面数
+         * @param pool_id 使用哪个内存进行分配
+         * @param phy_list 返回分配到的物理地址链表vector<phy_space_block>
+         */
+        bool
+        sDMmanager::sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list)
+        {
+            // 这里直接调用
+            Addr start = mem_pools->allocPhysPages(npages, pool_id); // 调用gem5物理内存分配函数直接分配
+            // 由于gem5本身没有处理不连续的地址情况,所以一定是连续的
+            if (start == POOL_EXHAUSTED)
+            {
+                // 本地内存耗尽
+                return false;
+            }
+            phy_list.push_back({start, npages});
+            // 成功则直接返回
+            return true;
+        }
+
         /**
          * @author
          * yqy
@@ -81,7 +133,7 @@ namespace gem5
          */
         Addr sDMmanager::getVirtualOffset(sdmIDtype id, Addr paddr)
         {
-            Addr cur_vaddr = paddr; // 查页表paddr
+            Addr cur_vaddr = paddr; // 实际使用查页表paddr
             return cur_vaddr - sdm_table[id].datavAddr;
         }
         /**
@@ -92,9 +144,6 @@ namespace gem5
          * @param offset 偏移量
          * @param known 标识是否已经检查过该页(0:未检查,1:处于该本地页,2:超出该本地页)
          * @param pnum 经过的页面数
-         * @attention 未实现
-         * @attention *处存在错误
-         *
          * ----------
          * |  |  |  | <x,3,~> ...
          * ----------
@@ -179,36 +228,17 @@ namespace gem5
          * @param keyPathAddr 返回关键路径物理地址
          * @param keyPathNode 返回关键路径节点
          * @return 返回层数
-         * @attention 未实现
+         * @attention 取回节点数据未实现*
          */
         int sDMmanager::getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode)
         {
             int pnum = 0;
+            rva = rva / (PAGE_SIZE >> 1); // 每经过半页数据,会形成一个叶节点
             Addr leafNodePagePtr = find((Addr)sdm_table[id].iITPtrPagePtr, rva, sdm_table[id].iit_skip, 0, pnum);
             leafNodePagePtr += (rva - pnum * PAGE_SIZE);
+            // 取回节点数据
+            // ...
             return 0;
-        }
-        /**
-         * @author yqy
-         * @brief 用于申请一定大小的物理空间,用于存储sdm管理结构
-         * @param npages 申请空间的页面数
-         * @param pool_id 使用哪个内存进行分配
-         * @param phy_list 返回分配到的物理地址链表vector<phy_space_block>
-         */
-        bool
-        sDMmanager::sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list)
-        {
-            // 这里直接调用
-            Addr start = mem_pools->allocPhysPages(npages, pool_id); // 调用gem5物理内存分配函数直接分配
-            // 由于gem5本身没有处理不连续的地址情况,所以一定是连续的
-            if (start == POOL_EXHAUSTED)
-            {
-                // 本地内存耗尽
-                return false;
-            }
-            phy_list.push_back({start, npages});
-            // 成功则直接返回
-            return true;
         }
         /**
          * @author yqy
@@ -230,33 +260,6 @@ namespace gem5
             // 计算除去skip指针后的可用的pair数量
             pair_per = ((PAGE_SIZE / PAIR_SIZE - 1) - skip);
             return ceil(pair_num, pair_per);
-        }
-        /**
-         * @author yqy
-         * @brief 将连续数据写入到gem5内存中
-         * @param byte_size 写入字节大小
-         * @param data 数据指针
-         * @param gem5_addr 写入的位置
-         * @attention 未实现
-         */
-        void sDMmanager::write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
-        {
-            //  packet mem[i]->gem5MemPtr->[i];...
-            return;
-        }
-        /**
-         * @author yqy
-         * @brief 从gem5内存中读取连续数据
-         * @param byte_size 读取字节大小
-         * @param container 存放读取数据指针
-         * @param gem5_addr 读取的位置
-         * @attention 未实现
-         * @attention 注意可能需要将地址按CL对齐后再读?
-         */
-        void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
-        {
-            // container <- packet[byte_size];
-            return;
         }
         /**
          * @author yqy
@@ -353,7 +356,7 @@ namespace gem5
          * @param pPageList 该sDM空间内的数据页物理地址列表
          * @return 是否成功注册
          * //sdm metadata指针(这里sdm metadata是sdm结构体指针)
-         * @attention 初始化这些空间的数据没有实现
+         * @attention 初始化这些空间的数据没有实现*
          */
         bool sDMmanager::sDMspace_register(std::vector<Addr> &pPageList)
         {
@@ -407,22 +410,44 @@ namespace gem5
         }
         /**
          * @author yqy
-         * @brief 完成HMAC校验(所在半页)
-         * @param paddr 需要校验的地址
+         * @brief 计算HMAC(所在半页)
+         * @param sdata 加密后的内存数据指针
+         * @param paddr 所在半页的物理地址指针
+         * @param counter 所在半页对应的计数器(节点)指针
+         * @param hash_key 所属sdm的hash密钥
+         * @param hmac 返回计算得到的hmac指针
+         * @attention 最终返回的HMAC长度为32Byte
          */
-        bool sDMmanager::hmac_verify(Addr paddr, iit_NodePtr counter, sdm_hashKey hash_key)
+        void hmac_get(uint8_t *sdata, Addr paddr, iit_NodePtr counter, sdm_hashKey hash_key, uint8_t *hmac)
         {
-            Addr pageAddr = (paddr & PAGE_ALIGN_MASK) | (paddr & (PAGE_SIZE >> 1));
-            uint8_t pg_data[PAGE_SIZE >> 1];
-            // 读取所在半页的内存数据
-            read4Mem(PAGE_SIZE >> 1, pg_data, pageAddr);
+            CME::sDM_HMAC(sdata, PAGE_SIZE >> 1, hash_key, paddr, (uint8_t *)counter, sizeof(iit_Node), hmac, SM3_SIZE);
+        }
+        /**
+         * @author yqy
+         * @brief 完成HMAC校验(所在半页)
+         * @param dataPAddr 读取的数据地址
+         * @param rva 需要校验的地址的逻辑偏移
+         * @param hmacAddr 返回hmac存在本地内存的物理地址
+         * @param hpg_data 所在半页的数据
+         * @param counter 所在半页对应的计数器(节点)指针
+         * @param hash_key 所属sdm的hash密钥
+         */
+        bool sDMmanager::hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
+                                     uint8_t *hpg_data, iit_NodePtr counters, sdm_hashKey hash_key)
+        {
+            Addr pageAddr = (dataPAddr & PAGE_ALIGN_MASK) | (dataPAddr & (PAGE_SIZE >> 1));
             uint8_t calc_hmac[SM3_SIZE];
+            // 读取所在半页的内存数据
+            read4Mem(PAGE_SIZE >> 1, hpg_data, pageAddr);
             // 计算HMAC
-            CME::sDM_HMAC(pg_data, PAGE_SIZE >> 1, hash_key, paddr, (uint8_t *)counter, sizeof(iit_Node), calc_hmac, SM3_SIZE);
+            hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
             // 与存储值比较
+            int pnum;
+            rva /= SDM_HMAC_ZOOM;
+            *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, rva, sdm_table[id].hmac_skip, 0, pnum);
             sdm_HMAC stored_hmac;
-            // 从内存中读取
-            read4Mem(PAGE_SIZE >> 1, stored_hmac, pageAddr);
+            // 从本地内存中读取
+            read4Mem(PAGE_SIZE >> 1, stored_hmac, *hmacAddr);
             assert(memcmp(calc_hmac, stored_hmac, sizeof(sdm_HMAC)) == 0 && "HMAC verify failed");
             return true;
         }
@@ -430,17 +455,24 @@ namespace gem5
          * @author yqy
          * @brief 对paddr CL的数据进行校验
          * @brief 并将一些中间值通过传输的指针参数返回
-         * @attention HMAC校验未完成
+         * @param paddr 物理地址
+         * @param hpg_data 所在半页的数据指针(这里是用来存储hmac-verify时读取的数据,避免多次重复读取,注意空间应该在调用者中事先分配)
+         * @param id 用来存储所属sdm space的编号
+         * @param rva 用来存储paddr处的数据位于整个安全空间的逻辑偏移(通过引用的形式返回给调用者)
+         * @param h 记录关键路径的长度(通过引用的形式返回给调用者)
+         * @param keyPathAddr 记录关键路径上节点在远端内存中的物理地址(避免多次重复读取,注意空间应该在调用者中事先分配)
+         * @param keyPathNode 记录关键路径上节点的数据(避免多次重复读取,注意空间应该在调用者中事先分配)
+         * @param key sdm_hashKe用于计算hash值的key
          */
-        bool sDMmanager::verify(Addr paddr, sdmIDtype id, Addr *rva, int &h, Addr *keyPathAddr, iit_NodePtr keyPathNode, sdm_hashKey key)
+        bool sDMmanager::verify(Addr paddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
+                                Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key)
         {
             *rva = getVirtualOffset(id, paddr);
-            h = getKeyPath(id, *rva, keyPathAddr, keyPathNode);
-            // 执行校验
+            *h = getKeyPath(id, *rva, keyPathAddr, keyPathNode);
             // 1. HMAC校验
             iit_Node tmpLeaf;
             keyPathNode[0].erase_hash_tag(IIT_LEAF_TYPE, &tmpLeaf);
-            bool hmac_verified = hmac_verify(paddr, &tmpLeaf, key);
+            bool hmac_verified = hmac_verify(paddr, *rva, hmacAddr, id, hpg_data, &tmpLeaf, hash_key); // 该函数内会读取所在半页的加密数据到hpg_data[PAGE_SIZE/2]数组中
             // 2. iit校验
             int type = IIT_LEAF_TYPE;
             // paddr对应的缓存行位于上层节点的哪个计数器
@@ -449,9 +481,9 @@ namespace gem5
             // 用于存放当前节点和父节点的major-minor计数器
             CL_Counter cl, f_cl;
             bool verified = true;
-            for (int i = 0; i < h && verified; i++)
+            for (int i = 0; i < *h && verified; i++)
             {
-                if (i < h - 1) // sum check
+                if (i < *h - 1) // sum check
                 {
                     keyPathNode[i].sum(type, cl);
                     // 取出父计数器
@@ -460,18 +492,19 @@ namespace gem5
                     verified = counter_cmp(cl, f_cl);
                 }
                 iit_hash_tag has_tag = keyPathNode[i].abstract_hash_tag(type);
-                iit_hash_tag chas_tag = keyPathNode[i].get_hash_tag(type, key, keyPathAddr[i]);
+                iit_hash_tag chas_tag = keyPathNode[i].get_hash_tag(type, hash_key, keyPathAddr[i]);
                 // 比较计算值和存储值
-                verified = (has_tag == chas_tag);
+                assert(has_tag == chas_tag);
+                // 后续节点都是mid类型
                 type = IIT_MID_TYPE;
             }
-            return verified;
+            return true;
         }
         /**
          * @author yqy
          * @brief 读取paddr的CL时进行校验
          * @return 是否通过校验
-         * @attention 未实现
+         * @attention 要求gem5的读取的大小与cacheline对齐
          * @attention 在abstract_mem.cc中检查每一一个read packet
          */
         void sDMmanager::read(PacketPtr pkt)
@@ -480,28 +513,33 @@ namespace gem5
             sdmIDtype id = sDMmanager::isContained(paddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
+            assert((pkt->getSize() == CL_SIZE) && "read:packet size isn't aligned with cache line");
             Addr rva;
             int h;
             Addr keyPathAddr[MAX_HEIGHT] = {0};
             iit_Node keyPathNode[MAX_HEIGHT] = {0};
             sdm_hashKey hash_key;
             sdm_table[id].key_get(HASH_KEY_TYPE, hash_key);
-            bool verified = verify(paddr, id, &rva, h, keyPathAddr, keyPathNode, hash_key);
+            Addr hmacAddr;                    // hmac在远端的物理地址
+            uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
+            bool verified = verify(paddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
             assert(verified && "verify failed before read");
             assert(0 && "sDM_Decrypt failed");
             CL_Counter cl;
             keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, rva / (IIT_LEAF_ARITY * CL_SIZE), cl);
             sdm_CMEKey cme_key;
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
-            // CME::sDM_Decrypt(data, counter, paddr, cl, cme_key);
+            // 解密Packet中的数据,并修改其中的数据
+            CME::sDM_Decrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key);
         }
         /**
          * @author yqy
          * @brief 写入paddr的CL时进行校验,并加密、维护iit、计算hmac
+         * @param pkt 截获的每一一个packet
          * @return 是否完成写入
-         * @attention 未实现
-         * @attention 假设写队列是安全的
-         * @attention 真正写入内存时才进行修改,读取写队列中的数据不需要校验
+         * @attention 1. 要求gem5的读取的大小与cacheline对齐
+         * @attention 2. 假设写队列是安全的,真正写入内存时才进行修改,读取写队列中的数据不需要校验
+         * @attention 3. 注意minor计数器溢出引发的重新加密半页数据写回到内存时,不需要检查
          */
         void
         sDMmanager::write(PacketPtr pkt)
@@ -511,46 +549,74 @@ namespace gem5
             id = isContained(paddr);
             if (!id) // 无需修改任何数据包
                 return;
-            // 该地址在所属空间中的相对偏移
-            Addr rva;
+            assert((pkt->getSize() == CL_SIZE) && "write:packet size isn't aligned with cache line");
+            Addr rva; // 该地址在所属空间中的相对偏移
             int h;
             Addr keyPathAddr[MAX_HEIGHT] = {0};
             iit_Node keyPathNode[MAX_HEIGHT] = {0};
             sdm_hashKey hash_key;
             sdm_table[id].key_get(HASH_KEY_TYPE, hash_key);
-            bool verified = verify(paddr, id, &rva, h, keyPathAddr, keyPathNode, hash_key);
+            Addr hmacAddr;                    // 对应的hmac在远端的物理地址
+            uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
+            bool verified = verify(paddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
             assert(verified && "verify failed before write");
-            // 1. 需要对数据包进行加密
-            //  uint8_t* data = PacketPtr->getdataPtr<uint8_t*>;
-            CL_Counter cl;
             uint32_t cur_k = rva / (IIT_LEAF_ARITY * CL_SIZE);
             int node_type = IIT_LEAF_TYPE;
             bool OF;
+            iit_Node bkeyPathNode[MAX_HEIGHT];
+            // 备份原来的节点信息(解密旧数据需要)
+            memcpy(bkeyPathNode, keyPathNode, sizeof(iit_Node) * MAX_HEIGHT);
             keyPathNode[0].inc_counter(node_type, cur_k, OF);
             keyPathNode[0].get_hash_tag(node_type, hash_key, paddr);
             cur_k /= IIT_MID_ARITY;
             sdm_CMEKey cme_key;
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
-            // 可以提前取得所在半页的数据,其后的HMAC计算是必须的,提高并行度
-            if (OF)
+            Addr hPageAddr = (paddr & PAGE_ALIGN_MASK) | (paddr & (PAGE_SIZE >> 1)); // 半页对齐地址
+            CL_Counter cl;
+            int off = (paddr - hPageAddr) / CL_SIZE; // 对应所在半页中的第几个计数器/缓存行
+            if (OF)                                  // 引发重加密所在半页
             {
-                // 引发重加密所在半页
-                Addr hlpageAddr = (paddr & PAGE_ALIGN_MASK) | (paddr & (PAGE_SIZE >> 1)); // 半页对齐地址
+                // 可以提前取得所在半页的数据(已在hpg_data中取得),其后的HMAC计算是必须的,提高并行度
+                for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)
+                {
+                    // 先解密得到原数据
+                    bkeyPathNode[0].getCounter_k(IIT_LEAF_TYPE, i, cl); // 取得该cl的旧counter
+                    CME::sDM_Decrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
+                                     hPageAddr + i * CL_SIZE, cme_key);
+                }
+                memcpy(hpg_data + off * CL_SIZE, pkt->getPtr<uint8_t>(), CL_SIZE);
+                for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)
+                {
+                    // 使用新的counter加密
+                    keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, i, cl);
+                    CME::sDM_Encrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
+                                     hPageAddr + i * CL_SIZE, cme_key);
+                    // 将重新加密好的cacheLine写回到内存
+                    write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, hPageAddr + i * CL_SIZE);
+                }
             }
             else
-            { // 仅加密该缓存行
-              // CME::sDM_Encrypt(data, counter, paddr, cl, cme_key);
+            {
+                keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl);
+                CME::sDM_Encrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter),
+                                 hPageAddr + off * CL_SIZE, cme_key);
+                // 将重新加密好的cacheLine写回到内存
+                write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, hPageAddr + off * CL_SIZE);
+                // 保持hpg_data的最新性,加密性,下面计算hmac会使用该数组
+                memcpy(hpg_data + off * CL_SIZE, pkt->getPtr<uint8_t>(), CL_SIZE);
             }
-            // 2. 重新计算HMAC并写入
-            // CME::sDM_HMAC(data, CL_SIZE, hash_key, paddr, cl,cme_key);
-            // 3. 修改iit tree
+            // 2. 重新计算HMAC并写入到远端内存
+            uint8_t hmac[CL_SIZE >> 1];
+            hmac_get(hpg_data, hPageAddr, keyPathNode, hash_key, hmac);
+            write2Mem(CL_SIZE >> 1, hmac, hmacAddr);
+            // 3. 修改iit tree并写回
             for (int i = 1; i < h; i++)
             {
                 keyPathNode[i].inc_counter(node_type, cur_k, OF);
                 keyPathNode[i].get_hash_tag(node_type, hash_key, paddr);
                 cur_k /= IIT_MID_ARITY;
+                write2Mem(sizeof(iit_Node), (uint8_t *)(&keyPathNode[i]), keyPathAddr[i]);
             }
-            // 写回所有数据
         }
     }
 }

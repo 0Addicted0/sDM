@@ -26,7 +26,7 @@
 #include <vector>
 
 #include "../../sim/mem_pool.hh"
-#include "../../packet.hh"
+#include "../packet.hh"
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -63,7 +63,7 @@ namespace gem5
         typedef struct _pagePtrPair
         {
             Addr curPageAddr;
-            uint32_t pnum; // 该空间到此页面(不含)的页面数量
+            uint32_t pnum; // 该空间到此页面(不含)的前面连续的逻辑页面数量
             uint32_t cnum; // 包含该地址其后连续的页面数量(>=1)
         } sdm_pagePtrPair;
         typedef sdm_pagePtrPair *sdm_pagePtrPairPtr;
@@ -158,7 +158,7 @@ namespace gem5
          * 单个sdm的metadata结构如下
          * |metadata|
          * |         -------------------\
-         * |                             -----------------------------------\
+         * |                             --------------------------------------\
          * |-数据空间大小-|-数据页指针链表头-|-HMAC指针链表头-|-完整性树指针链表头-|
          */
         typedef struct _sdm_space
@@ -238,10 +238,12 @@ namespace gem5
             std::vector<sdm_space> sdm_table;                                                 // id->sdm
             std::unordered_map<Addr, uint64_t> sdm_paddr2id;                                  // paddr -> id
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
-            void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list, int skip, int ac_num, int lnpages);
+            void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
+                                int skip, int ac_num, int lnpages);
             void write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
             void read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
-            bool hmac_verify(Addr paddr, iit_NodePtr counter, sdm_hashKey hash_key);
+            bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
+                             uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
 
         public:
@@ -251,7 +253,8 @@ namespace gem5
             bool sDMspace_register(std::vector<Addr> &pageList);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
-            bool verify(Addr paddr, sdmIDtype id, Addr *rva, int &h, Addr *keyPathAddr, iit_NodePtr keyPathNode, sdm_hashKey key);
+            bool verify(Addr paddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
+                        Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
             void write(PacketPtr pkt);
             void read(PacketPtr pkt);
         };
