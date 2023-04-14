@@ -165,6 +165,7 @@ namespace gem5
         {
             sdmIDtype id;                          // 每个space拥有唯一id,用于避免free-malloc counter重用问题
             sdm_size sDataSize;                    // 数据空间大小字节单位
+            uint32_t iITh;                         // 完整性树高
             Addr datavAddr;                        // 数据虚拟地址起始
             sdm_hmacPagePtrPagePtr HMACPtrPagePtr; // HMAC页指针集指针
             int hmac_skip;

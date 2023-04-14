@@ -20,7 +20,7 @@ namespace gem5
          * @brief 根据数据区大小计算iit大小
          * @return 返回整个iit的字节大小
          */
-        uint64_t getIITsize(uint64_t data_size)
+        uint64_t getIITsize(uint64_t data_size, uint32_t &h)
         {
             /**
              * 一个叶节点arity=32,对应32个CL => data_size = 2KB
@@ -37,6 +37,7 @@ namespace gem5
             {
                 node_num += leaf_num;
                 leaf_num >>= 6; // /64
+                h++;
             }
             return node_num * CL_SIZE; // 转换为字节大小
         }
@@ -233,12 +234,25 @@ namespace gem5
         int sDMmanager::getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode)
         {
             int pnum = 0;
-            rva = rva / (PAGE_SIZE >> 1); // 每经过半页数据,会形成一个叶节点
-            Addr leafNodePagePtr = find((Addr)sdm_table[id].iITPtrPagePtr, rva, sdm_table[id].iit_skip, 0, pnum);
-            leafNodePagePtr += (rva - pnum * PAGE_SIZE);
-            // 取回节点数据
-            // ...
-            return 0;
+            // 我在sdm_space 中加了一个iITh变量，在getiitsize()函数里计算
+            uint32_t h = sdm_table[id].iITh;
+            uint32_t node_rva = rva;
+            for (int i = 0; i < h; i++)
+            {
+                Addr NodePagePtr = find((Addr)sdm_table[id].iITPtrPagePtr, node_rva, sdm_table[id].iit_skip, 0, pnum);
+                NodePagePtr += (node_rva - pnum * PAGE_SIZE); // 目标页首地址加上偏移
+                keyPathAddr[i] = NodePagePtr;
+                read4Mem(sizeof(iit_Node), (uint8_t *)(keyPathNode + sizeof(iit_Node) * i), NodePagePtr);
+                if (i == 0)
+                {
+                    node_rva /= IIT_LEAF_ARITY;
+                }
+                else
+                {
+                    node_rva /= IIT_MID_ARITY;
+                }
+            }
+            return h;
         }
         /**
          * @author yqy
@@ -366,7 +380,8 @@ namespace gem5
             // 1. data大小
             sdm_size data_size = pPageList.size() * PAGE_SIZE;
             // 2. IIT树大小
-            sdm_size iit_size = getIITsize(data_size);
+            uint32_t h = 0;
+            sdm_size iit_size = getIITsize(data_size,h);
             // 3. HMAC大小
             sdm_size hmac_size = data_size * SDM_HMAC_ZOOM;
             // sdm_size extra_size = iit_size + hmac_size;// 额外所需空间的总大小
@@ -374,6 +389,7 @@ namespace gem5
             sdm_space sp;
             // 标记space id
             sp.id = ++sdm_space_cnt;
+            sp.iITh = h;
             // 这里为hmac和iit申请远端内存空间
             std::vector<phy_space_block> r_hmac_phy_list;
             std::vector<phy_space_block> r_iit_phy_list;
