@@ -68,6 +68,10 @@ void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
 
 /*
+ * 返回gem5分配的虚拟地址到sDMmanager 
+*/
+bool m5_sdm_poster(uint64_t vaddr,size_t size);
+/*
  * Send a very generic poke to the workload so it can do something. It's up to
  * the workload to know what information to look for to interpret an event,
  * such as what PC it came from, what register values are, or the context of

@@ -36,51 +36,70 @@ namespace gem5
             while (leaf_num > 1)
             {
                 node_num += leaf_num;
-                leaf_num >>= 6; // /64
+                leaf_num /= IIT_MID_ARITY;
                 h++;
             }
             return node_num * CL_SIZE; // 转换为字节大小
         }
         /**
-         * sDMmanager构造函数
-         * @attention 待传入参数*
+         * sDMmanager构造函数，后续需要初始化的变量可以添加到sDM.py配置文件中（每个变量可能需要赋默认值），通过params初始化
+         * 如果要在类实例化时通过传参初始化，可采用以下方法，覆盖默认值。
+         * params = {"x": 3, "y": 4}
+         * instance = sDMmanager(params=params)
+         * @attention 待传入参数
          */
-        sDMmanager::sDMmanager(int sdm_pool_id) : remote_pool_id(remote_pool_id)
+        sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
+                                                                  _requestorId(params.system->getRequestorId(this)),
+                                                                  memPort(params.name + ".mem_side", this),
+                                                                  remote_pool_id(params.remote_pool_id)
+         {
+            std::cout << "!!sDMmanager!!\n"
+                       << std::endl;
+         }
+        /**
+         * @brief
+         * sDMmanager析构函数
+         */
+        sDMmanager::~sDMmanager() {}
+        /**
+         * @author psj
+         * @brief 收到响应packet后记录pkt并向发送方通知已接收响应包
+         * @return 返回是否成功收到响应packet
+         */
+        void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
         {
-            printf("!!sDMmanager!!\n");
+            RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
+            PacketPtr pkt = Packet::createRead(req);
+            pkt->dataDynamic(new uint8_t[byte_size]);
+            bool res = memPort.sendTimingReq(pkt);
+            // if (res)
+            // {
+            //     std::cout << "Successfully send timing request. Tick = " <<
+            //         curTick() << std::endl;
+            // }
+
+            // mem_ctrl发回响应packet时会自动调用recvTimingResp的函数，设置两个全局变量has_recv和pkt_recv
+            // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
+            while (!has_recv)
+                memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
+            has_recv = false;
+            return;
         }
         /**
-         * sDMmanager
-         */
-        sDMmanager::~sDMmanager()
-        {
-        }
-        /**
-         * @author yqy
+         * @author psj
          * @brief 将连续数据写入到gem5内存中
          * @param byte_size 写入字节大小
          * @param data 数据指针
          * @param gem5_addr 写入的位置
-         * @attention 未实现*
+         * @attention 未验证*
          * @attention 注意可能需要将地址按CL对齐后再读写
          */
         void sDMmanager::write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
         {
-            //  packet mem[i]->gem5MemPtr->[i];...
-            return;
-        }
-        /**
-         * @author yqy
-         * @brief 从gem5内存中读取连续数据
-         * @param byte_size 读取字节大小
-         * @param container 存放读取数据指针
-         * @param gem5_addr 读取的位置
-         * @attention 未实现*
-         * @attention 注意可能需要将地址按CL对齐后再读写
-         */
-        void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
-        {
-            // container <- packet[byte_size];
+            RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
+            PacketPtr pkt = Packet::createWrite(req);
+            pkt->setData((const uint8_t *)data);
+            memPort.sendTimingReq(pkt);  //  packet mem[i]->gem5MemPtr->[i];...
             return;
         }
         /**
@@ -116,13 +135,17 @@ namespace gem5
          * 返回0表示该地址所在页面不处于任何sdm中
          * 否则返回其所在sdm的id(sdmIDtype)
          */
-        sdmIDtype sDMmanager::isContained(Addr paddr)
+        sdmIDtype sDMmanager::isContained(Addr vaddr)
         {
-            paddr &= PAGE_ALIGN_MASK;
-            auto id = sdm_paddr2id.find(paddr);
-            if (id == sdm_paddr2id.end())
-                return 0;
-            return id->second;
+            vaddr &= PAGE_ALIGN_MASK;
+            auto it = sdm_paddr2id.lower_bound(vaddr);
+            if(it!=sdm_paddr2id.end() && it->first==vaddr)
+                return it->second.second;
+            if(it!=sdm_paddr2id.begin())
+                it--;
+            if(it->first<=vaddr && vaddr<it->first+it->second.first)
+                return it->second.second;
+            return 0;
         }
         /**
          * @author yqy
@@ -229,7 +252,6 @@ namespace gem5
          * @param keyPathAddr 返回关键路径物理地址
          * @param keyPathNode 返回关键路径节点
          * @return 返回层数
-         * @attention 取回节点数据未实现*
          */
         int sDMmanager::getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode)
         {
@@ -365,6 +387,26 @@ namespace gem5
             }
         }
         /**
+         * @author yqy
+         * @brief 初始化对应的sDM space
+         */
+        void
+        sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey)
+        {
+            // 向数据空间写入0
+            for (int i = 0; i < byte_size / CL_SIZE; i++)
+            {
+                // 分CL加密并写入
+            }
+            // 加密数据
+
+            // 计算HMAC
+
+            // 构建iit
+
+            return;
+        }
+        /**
          * @brief 为数据空间构建sDM空间
          * @author yqy
          * @param pPageList 该sDM空间内的数据页物理地址列表
@@ -372,34 +414,55 @@ namespace gem5
          * //sdm metadata指针(这里sdm metadata是sdm结构体指针)
          * @attention 初始化这些空间的数据没有实现*
          */
-        bool sDMmanager::sDMspace_register(std::vector<Addr> &pPageList)
+        bool
+        sDMmanager::sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size)
         {
-            assert(pPageList.size() && "data is empty");
-            // 可以使用某种hash结构存
-            // 这里需要计算所需的额外空间
-            // 1. data大小
-            sdm_size data_size = pPageList.size() * PAGE_SIZE;
-            // 2. IIT树大小
-            uint32_t h = 0;
-            sdm_size iit_size = getIITsize(data_size,h);
-            // 3. HMAC大小
-            sdm_size hmac_size = data_size * SDM_HMAC_ZOOM;
-            // sdm_size extra_size = iit_size + hmac_size;// 额外所需空间的总大小
-            // 准备metadata
+            assert(data_byte_size && "data is empty");
+            assert((data_byte_size & (PAGE_SIZE - 1) == 0) &&
+                   (data_byte_size & (PAGE_SIZE - 1) == 0) &&
+                   "vaddr or size is not aligned pagesize");
+            // 准备新空间的metadata
             sdm_space sp;
-            // 标记space id
+            // 1. 计算data大小
+            uint64_t data_size = data_byte_size;
+            // data_size *= PAGE_SIZE;
+            // 检查申请的虚拟空间是否已经存在于其他space中
+            auto aft = sdm_paddr2id.lower_bound((Addr)(vaddr + data_size));
+            if(aft != sdm_paddr2id.begin())
+            {
+                aft--;
+                assert((aft->first + (aft->second.first)*PAGE_SIZE <= vaddr) && "overlapped");
+            }
+            else 
+            {
+                assert((aft->first >= vaddr+data_byte_size) && "overlapped");
+            }
+            // 2. 计算IIT树大小
+            uint32_t h = 0;
+            sdm_size iit_size = getIITsize(data_size, h);
+            // 3. 计算HMAC大小
+            sdm_size hmac_size = data_size / SDM_HMAC_ZOOM;
+            // sdm_size extra_size = iit_size + hmac_size;// 额外所需空间的总大小
+            // 为新空间设置id
             sp.id = ++sdm_space_cnt;
             sp.iITh = h;
-            // 这里为hmac和iit申请远端内存空间
+            // 为新空间设置密钥 暂时简单使用id做密钥
+            memcpy(&sp.cme_key, &sp.id, sizeof(sp.id));
+            memcpy(&sp.hash_key, &sp.id, sizeof(sp.id));
+            // 为新空间的hmac和iit申请远端内存空间
             std::vector<phy_space_block> r_hmac_phy_list;
             std::vector<phy_space_block> r_iit_phy_list;
             sdm_malloc(hmac_size / PAGE_SIZE, remote_pool_id, r_hmac_phy_list);
             sdm_malloc(iit_size / PAGE_SIZE, remote_pool_id, r_iit_phy_list);
             // 初始化HMAC和iit区域(将数据区置0)
-            // ...
-
+            sdm_CMEKey tmp_ckey;
+            sp.key_get(CME_KEY_TYPE, tmp_ckey);
+            sdm_hashKey tmp_hkey;
+            sp.key_get(HASH_KEY_TYPE, tmp_hkey);
+            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey);
             // 预估所需页面数量,同时填写跳数、每页可写数据对数量
-            int hmac_per, iit_per;
+            int hmac_per,
+                iit_per;
             int hmac_lpage_num = pred_local_page_need(sp.hmac_skip, r_hmac_phy_list.size(), hmac_per);
             int iit_lpage_num = pred_local_page_need(sp.iit_skip, r_iit_phy_list.size(), iit_per);
             // 向本地申请内存空间
@@ -413,15 +476,10 @@ namespace gem5
             build_SkipList(r_hmac_phy_list, l_hmac_phy_list, sp.hmac_skip, hmac_per, hmac_lpage_num);
             // 构建iit skip-list
             build_SkipList(r_iit_phy_list, l_iit_phy_list, sp.iit_skip, iit_per, iit_lpage_num);
-            // 这里的sdm_table、sdm_paddr2id查询还没有接入gem5
-            for (auto paddr : pPageList)
-            {
-                // 该地址不可能已经存在于其他sdm空间
-                assert(!sdm_paddr2id[paddr] && "reused before free");
-                // 添加地址映射
-                sdm_paddr2id[paddr] = sp.id;
-            }
+            // 这里的sdm_table、sdm_paddr2id查询还没有接入gem5内存系统
             sdm_table.push_back(sp);
+            // 加入到vaddr->id查询表
+            sdm_paddr2id.insert(std::make_pair(vaddr, std::make_pair(data_size, sp.id)));
             return true;
         }
         /**
@@ -525,8 +583,11 @@ namespace gem5
          */
         void sDMmanager::read(PacketPtr pkt)
         {
-            Addr paddr = pkt->getAddr();
-            sdmIDtype id = sDMmanager::isContained(paddr);
+            // Addr pktAddr = pkt->getAddr();
+            Addr pktAddr;
+            if (!pkt->req->getFlags().isSet(0x00000004)) // 该请求一定不来自程序本身
+                return;
+            sdmIDtype id = sDMmanager::isContained(pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
             assert((pkt->getSize() == CL_SIZE) && "read:packet size isn't aligned with cache line");
@@ -538,7 +599,8 @@ namespace gem5
             sdm_table[id].key_get(HASH_KEY_TYPE, hash_key);
             Addr hmacAddr;                    // hmac在远端的物理地址
             uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
-            bool verified = verify(paddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
+            // 注意这里验证也暂时先使用了虚拟地址
+            bool verified = verify(pktAddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
             assert(verified && "verify failed before read");
             assert(0 && "sDM_Decrypt failed");
             CL_Counter cl;
@@ -546,7 +608,8 @@ namespace gem5
             sdm_CMEKey cme_key;
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
             // 解密Packet中的数据,并修改其中的数据
-            CME::sDM_Decrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key);
+            // 注意这里解密也暂时先使用了虚拟地址
+            CME::sDM_Decrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter), pktAddr, cme_key);
         }
         /**
          * @author yqy
@@ -560,9 +623,15 @@ namespace gem5
         void
         sDMmanager::write(PacketPtr pkt)
         {
-            Addr paddr = pkt->getAddr();
+            // 现在使用虚拟地址
+            // request.hh
+            // VALID_VADDR = 0x00000004
+            Addr pktAddr;
+            if (!pkt->req->getFlags().isSet(0x00000004)) // 该请求一定不来自程序本身
+                return;
+
             sdmIDtype id;
-            id = isContained(paddr);
+            id = isContained(pktAddr);
             if (!id) // 无需修改任何数据包
                 return;
             assert((pkt->getSize() == CL_SIZE) && "write:packet size isn't aligned with cache line");
@@ -574,7 +643,7 @@ namespace gem5
             sdm_table[id].key_get(HASH_KEY_TYPE, hash_key);
             Addr hmacAddr;                    // 对应的hmac在远端的物理地址
             uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
-            bool verified = verify(paddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
+            bool verified = verify(pktAddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
             assert(verified && "verify failed before write");
             uint32_t cur_k = rva / (IIT_LEAF_ARITY * CL_SIZE);
             int node_type = IIT_LEAF_TYPE;
@@ -583,14 +652,14 @@ namespace gem5
             // 备份原来的节点信息(解密旧数据需要)
             memcpy(bkeyPathNode, keyPathNode, sizeof(iit_Node) * MAX_HEIGHT);
             keyPathNode[0].inc_counter(node_type, cur_k, OF);
-            keyPathNode[0].get_hash_tag(node_type, hash_key, paddr);
+            keyPathNode[0].get_hash_tag(node_type, hash_key, pktAddr);
             cur_k /= IIT_MID_ARITY;
             sdm_CMEKey cme_key;
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
-            Addr hPageAddr = (paddr & PAGE_ALIGN_MASK) | (paddr & (PAGE_SIZE >> 1)); // 半页对齐地址
+            Addr hPageAddr = (pktAddr & PAGE_ALIGN_MASK) | (pktAddr & (PAGE_SIZE >> 1)); // 半页对齐地址
             CL_Counter cl;
-            int off = (paddr - hPageAddr) / CL_SIZE; // 对应所在半页中的第几个计数器/缓存行
-            if (OF)                                  // 引发重加密所在半页
+            int off = (pktAddr - hPageAddr) / CL_SIZE; // 对应所在半页中的第几个计数器/缓存行
+            if (OF)                                    // 引发重加密所在半页
             {
                 // 可以提前取得所在半页的数据(已在hpg_data中取得),其后的HMAC计算是必须的,提高并行度
                 for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)
@@ -629,7 +698,7 @@ namespace gem5
             for (int i = 1; i < h; i++)
             {
                 keyPathNode[i].inc_counter(node_type, cur_k, OF);
-                keyPathNode[i].get_hash_tag(node_type, hash_key, paddr);
+                keyPathNode[i].get_hash_tag(node_type, hash_key, pktAddr);
                 cur_k /= IIT_MID_ARITY;
                 write2Mem(sizeof(iit_Node), (uint8_t *)(&keyPathNode[i]), keyPathAddr[i]);
             }

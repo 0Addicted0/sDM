@@ -185,8 +185,11 @@ System::System(const Params &p)
 {
     panic_if(!workload, "No workload set for system %s "
             "(could use StubWorkload?).", name());
+    
+    //  yqy mark
+    // printf("system construceted!!\n");
     workload->setSystem(this);
-
+    
     // add self to global system list
     systemList.push_back(this);
 

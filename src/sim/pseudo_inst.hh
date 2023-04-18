@@ -95,7 +95,7 @@ void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
 void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
-
+bool sdm_poster(ThreadContext *tc,uint64_t vaddr,size_t size);
 /**
  * Execute a decoded M5 pseudo instruction
  *
@@ -215,6 +215,7 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         return true;
 
       case M5OP_RESERVED1:
+        invokeSimcall<ABI>(tc, sdm_poster);
       case M5OP_RESERVED2:
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:

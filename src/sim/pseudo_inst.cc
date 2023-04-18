@@ -603,6 +603,16 @@ workend(ThreadContext *tc, uint64_t workid, uint64_t threadid)
         }
     }
 }
+/**
+ * @attention 待实现*
+*/
+bool
+sdm_poster(ThreadContext *tc, Addr vaddr, size_t size)
+{
+    // return tc->getProcessPtr()->sDMmanager->sdm_register(vaddr,size);
+    // tc->getProcessPtr()->sDMmanager->sdm_register(pid,vaddr,size);
+    return true;
+}
 
 } // namespace pseudo_inst
 } // namespace gem5

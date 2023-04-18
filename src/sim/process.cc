@@ -155,7 +155,9 @@ Process::Process(const ProcessParams &params, EmulationPageTable *pTable,
      */
     _tgid = params.pid;
 
-    printf("process.cc [construct] pool: ");
+//  yqy mark
+    printf("%s construct!!\n",progName());
+    printf("process.cc pool: ");
     for(int pool_id: pool_ids)
         printf("%d ",pool_id);
     printf("\n");

@@ -196,6 +196,8 @@ MemCtrl::addToReadQueue(PacketPtr pkt,
 
     assert(pkt_count != 0);
 
+    // yqy mark
+    // printf("[%ld]mem_ctrl.cc addToReadQueue:%s\n",curTick(),pkt->print().c_str());
     // if the request size is larger than burst size, the pkt is split into
     // multiple packets
     // Note if the pkt starting address is not aligened to burst size, the
@@ -303,6 +305,8 @@ void
 MemCtrl::addToWriteQueue(PacketPtr pkt, unsigned int pkt_count,
                                 MemInterface* mem_intr)
 {
+    // yqy mark
+    // printf("[%ld]mem_ctrl.cc addToWriteQueue:%s\n",curTick(),pkt->print().c_str());
     // only add to the write queue here. whenever the request is
     // eventually done, set the readyTime, and call schedule()
     assert(pkt->isWrite());
@@ -403,6 +407,8 @@ MemCtrl::printQs() const
 bool
 MemCtrl::recvTimingReq(PacketPtr pkt)
 {
+    // yqy mark
+    // printf("[%ld]mem_ctrl.cc recvTimingReq:%s\n",curTick(),pkt->print().c_str());
     // This is where we enter from the outside world
     DPRINTF(MemCtrl, "recvTimingReq: request %s addr %#x size %d\n",
             pkt->cmdString(), pkt->getAddr(), pkt->getSize());
@@ -493,6 +499,10 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
 
     MemPacket* mem_pkt = queue.front();
 
+    // yqy mark
+    // if(mem_pkt->pkt)
+    //     printf("[%ld]mem_ctrl.cc processRespondEvent:%s\n",curTick(),mem_pkt->pkt->print().c_str());
+    // else printf("[%ld]mem_ctrl.cc processRespondEvent\n",curTick());
     // media specific checks and functions when read response is complete
     // DRAM only
     mem_intr->respondEvent(mem_pkt->rank);
@@ -616,6 +626,8 @@ void
 MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
                                                 MemInterface* mem_intr)
 {
+    // yqy mark
+    // printf("[%ld]mem_ctrl.cc accessAndRespond:%s\n",curTick(),pkt->print().c_str());
     DPRINTF(MemCtrl, "Responding to Address %#x.. \n", pkt->getAddr());
 
     bool needsResponse = pkt->needsResponse();
@@ -789,6 +801,11 @@ MemCtrl::inWriteBusState(bool next_state) const
 Tick
 MemCtrl::doBurstAccess(MemPacket* mem_pkt, MemInterface* mem_intr)
 {
+    // yqy mark
+    // if(mem_pkt->pkt)
+    //      printf("[%ld]mem_ctrl.cc doBurstAccess:%s\n",curTick(),mem_pkt->pkt->print().c_str());
+    // else  printf("[%ld]mem_ctrl.cc doBurstAccess\n",curTick());
+    // printf("[%ld]mem_ctrl.cc doBurstAccess:%s\n",curTick(),mem_pkt->pkt->print().c_str());
     // first clean up the burstTick set, removing old entries
     // before adding new entries for next burst
     pruneBurstTick();

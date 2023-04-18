@@ -68,6 +68,8 @@ AbstractMemory::AbstractMemory(const Params &p) :
     panic_if(!range.valid() || !range.size(),
              "Memory range %s must be valid with non-zero size.",
              range.to_string());
+    //  yqy mark
+    printf("AbstractMemory %s constructed!!\n",range.to_string().c_str());
 }
 
 void
@@ -443,6 +445,10 @@ AbstractMemory::access(PacketPtr pkt)
             trackLoadLocked(pkt);
         }
         if (pmemAddr) {
+            // yqy mark
+            // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
+            // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
+            // printf(" read[%lx]\n",pkt->req->getVaddr());
             pkt->setData(host_addr);
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
@@ -459,6 +465,10 @@ AbstractMemory::access(PacketPtr pkt)
     } else if (pkt->isWrite()) {
         if (writeOK(pkt)) {
             if (pmemAddr) {
+                // yqy mark
+                // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
+                // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
+                // printf(" write[%lx]\n",pkt->req->getVaddr());
                 pkt->writeData(host_addr);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
@@ -480,6 +490,7 @@ AbstractMemory::access(PacketPtr pkt)
 void
 AbstractMemory::functionalAccess(PacketPtr pkt)
 {
+    // printf("[%ld]Get funcitonalAccess%s\n",curTick(),pkt->print().c_str());
     assert(pkt->getAddrRange().isSubset(range));
 
     uint8_t *host_addr = toHostAddr(pkt->getAddr());

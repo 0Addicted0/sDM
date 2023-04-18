@@ -19,14 +19,18 @@
 #include "./IIT/IIT.hh"
 #include "CME/CME.hh"
 
-#include <unordered_map>
+#include <map>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <vector>
 
+#include "base/types.hh"
+#include "../../sim/system.hh"
 #include "../../sim/mem_pool.hh"
 #include "../packet.hh"
+#include "../port.hh"
+#include "../../sim/clocked_object.hh"
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -45,8 +49,8 @@ namespace gem5
         typedef uint64_t sdmIDtype;                // sdm空间编号类型 u64
         typedef uint64_t sdm_size;                 // sdm保护的数据的大小
         typedef uint8_t *sdm_dataPtr;              // 数据区指针
-        typedef uint8_t sdm_hashKey[SM4_KEY_SIZE]; // sdm空间密钥
-        typedef uint8_t sdm_CMEKey[SM3_KEY_SIZE];  // sdm hash密钥
+        typedef uint8_t sdm_hashKey[SM4_KEY_SIZE]; // sdm space hash密钥(hmac iit)
+        typedef uint8_t sdm_CMEKey[SM3_KEY_SIZE];  // sdm space cme密钥
         typedef uint8_t sdm_HMAC[HMAC_SIZE];       // 一个SM3 HASH 256bit
         typedef uint8_t CL[CL_SIZE];
         uint64_t ceil(uint64_t a, uint64_t b);
@@ -67,6 +71,7 @@ namespace gem5
             uint32_t cnum; // 包含该地址其后连续的页面数量(>=1)
         } sdm_pagePtrPair;
         typedef sdm_pagePtrPair *sdm_pagePtrPairPtr;
+
         /**
          * @brief
          * 为解决数据空间在远端内存物理上可能不连续
@@ -163,17 +168,26 @@ namespace gem5
          */
         typedef struct _sdm_space
         {
-            sdmIDtype id;                          // 每个space拥有唯一id,用于避免free-malloc counter重用问题
-            sdm_size sDataSize;                    // 数据空间大小字节单位
-            uint32_t iITh;                         // 完整性树高
-            Addr datavAddr;                        // 数据虚拟地址起始
-            sdm_hmacPagePtrPagePtr HMACPtrPagePtr; // HMAC页指针集指针
-            int hmac_skip;
+            sdmIDtype id;                            // 每个space拥有唯一id,用于避免free-malloc counter重用问题
+            sdm_size sDataSize;                      // 数据空间大小字节单位
+            uint32_t iITh;                           // 完整性树高
+            Addr datavAddr;                          // 数据虚拟地址起始
+            sdm_hmacPagePtrPagePtr HMACPtrPagePtr;   // HMAC页指针集指针
+            int hmac_skip;                           // hmac数据对表最大skip大小
             sdm_iitNodePagePtrPagePtr iITPtrPagePtr; // 完整性树页指针集指针
-            int iit_skip;
+            int iit_skip;                            // iit数据对表最大skip大小
+            // 52B(43B)->64B
             // iit_root Root;                        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
-            sdm_hashKey iit_key; // 当前空间完整性树密钥
-            sdm_CMEKey cme_key;  // 当前空间内存加密密钥
+            sdm_hashKey hash_key; // 当前空间完整性树密钥 16B
+            sdm_CMEKey cme_key;   // 当前空间内存加密密钥 32B
+            /**
+             * @author yqy
+             * @brief 定义排序升序sdm数据空间升序排列
+             */
+            bool operator<(const struct _sdm_space &x) const
+            {
+                return datavAddr + sDataSize < x.datavAddr + x.sDataSize;
+            }
             /**
              * @brief 返回解密的密钥
              * @param key_type 需要返回的密钥标识:HASH_KEY_TYPE,CME_KEY_TYPE
@@ -184,12 +198,12 @@ namespace gem5
             {
                 if (key_type == HASH_KEY_TYPE)
                 {
-                    //... decryt iit key
-                    memcpy(key, iit_key, sizeof(sdm_hashKey));
+                    //... decryt hash key with cpu key
+                    memcpy(key, hash_key, sizeof(sdm_hashKey));
                 }
                 else if (key_type == CME_KEY_TYPE)
                 {
-                    //... decrypt cme key
+                    //... decrypt cme key with cpu key
                     memcpy(key, cme_key, sizeof(sdm_CMEKey));
                 }
             }
@@ -226,18 +240,42 @@ namespace gem5
         /**
          * sDMmanager管理所有sdm相关操作，是sdm的硬件抽象
          */
-        class sDMmanager
+        class sDMmanager : public ClockedObject
         {
+        public:
+            class sDMPort : public RequestPort
+            {
+            public:
+                sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager), sdmmanager(_sdmmanager) {}
+
+            protected:
+                sDMmanager *sdmmanager;
+
+                bool recvTimingResp(PacketPtr pkt);
+                void recvReqRetry()
+                {
+                    panic("%s does not expect a retry\n", name());
+                }
+            };
+
+            bool has_recv = 0;
+            PacketPtr pkt_recv = nullptr;
+            sDMPort memPort;
+            RequestorID requestorId() { return _requestorId; }
+
         private:
             // 数据页页指针集指针
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
-            sdmIDtype sdm_space_cnt;                                                          // 全局单增,2^64永远不会耗尽, start from 1
-            int remote_pool_id;                                                               // 可用本地内存池(内存段)编号
-            int local_pool_id;                                                                // 记录每个process/workload的本地pool的编号
-            MemPools *mem_pools;                                                              // 实例化时的内存池指针
-            std::vector<sdm_space> sdm_table;                                                 // id->sdm
-            std::unordered_map<Addr, uint64_t> sdm_paddr2id;                                  // paddr -> id
+            sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
+            int remote_pool_id;      // 可用本地内存池(内存段)编号
+            int local_pool_id;       // 记录每个process/workload的本地pool的编号
+            MemPools *mem_pools;     // 实例化时的内存池指针
+            // Process *proc;                                                                    // 是为了使用pTable而引入与实际情况是不相符的
+            std::vector<sdm_space> sdm_table; // id->sdm
+            // 拦截每次的访存的vaddr时，查找此表对应到相应的space id
+            // vaddr <==> (page_num,space id)
+            std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
             void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
                                 int skip, int ac_num, int lnpages);
@@ -246,18 +284,29 @@ namespace gem5
             bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
+            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey);
+            RequestorID _requestorId;
 
         public:
-            sDMmanager(int sdm_pool_id);
+            sDMmanager(const sDMmanagerParams &p);
+            // sDMmanager(int remote_pool_id, int local_pool_id, MemPools *mem_pools);
             ~sDMmanager();
             sdmIDtype isContained(Addr paddr);
-            bool sDMspace_register(std::vector<Addr> &pageList);
+            bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
             bool verify(Addr paddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
             void write(PacketPtr pkt);
             void read(PacketPtr pkt);
+
+            Port &
+            getPort(const std::string &if_name, PortID idx = InvalidPortID) override
+            {
+                if (if_name == "mem_side")
+                    return memPort;
+                return sDMmanager::getPort(if_name, idx);
+            }
         };
     }
 }
