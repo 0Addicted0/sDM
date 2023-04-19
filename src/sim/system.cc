@@ -65,474 +65,503 @@
 namespace gem5
 {
 
-std::vector<System *> System::systemList;
+    std::vector<System *> System::systemList;
 
-void
-System::Threads::Thread::resume()
-{
-    DPRINTFS(Quiesce, context->getCpuPtr(), "activating\n");
-    context->activate();
-}
+    void
+    System::Threads::Thread::resume()
+    {
+        DPRINTFS(Quiesce, context->getCpuPtr(), "activating\n");
+        context->activate();
+    }
 
-std::string
-System::Threads::Thread::name() const
-{
-    assert(context);
-    return csprintf("%s.threads[%d]", context->getSystemPtr()->name(),
-            context->contextId());
-}
+    std::string
+    System::Threads::Thread::name() const
+    {
+        assert(context);
+        return csprintf("%s.threads[%d]", context->getSystemPtr()->name(),
+                        context->contextId());
+    }
 
-void
-System::Threads::Thread::quiesce() const
-{
-    context->suspend();
-    context->getSystemPtr()->workload->recordQuiesce();
-}
+    void
+    System::Threads::Thread::quiesce() const
+    {
+        context->suspend();
+        context->getSystemPtr()->workload->recordQuiesce();
+    }
 
-void
-System::Threads::insert(ThreadContext *tc)
-{
-    ContextID id = size();
-    tc->setContextId(id);
+    void
+    System::Threads::insert(ThreadContext *tc)
+    {
+        ContextID id = size();
+        tc->setContextId(id);
 
-    auto &t = threads.emplace_back();
-    t.context = tc;
-    // Look up this thread again on resume, in case the threads vector has
-    // been reallocated.
-    t.resumeEvent = new EventFunctionWrapper(
-            [this, id](){ thread(id).resume(); },
+        auto &t = threads.emplace_back();
+        t.context = tc;
+        // Look up this thread again on resume, in case the threads vector has
+        // been reallocated.
+        t.resumeEvent = new EventFunctionWrapper(
+            [this, id]()
+            { thread(id).resume(); },
             tc->getSystemPtr()->name());
-}
-
-void
-System::Threads::replace(ThreadContext *tc, ContextID id)
-{
-    auto &t = thread(id);
-    panic_if(!t.context, "Can't replace a context which doesn't exist.");
-    if (t.resumeEvent->scheduled()) {
-        Tick when = t.resumeEvent->when();
-        t.context->getCpuPtr()->deschedule(t.resumeEvent);
-        tc->getCpuPtr()->schedule(t.resumeEvent, when);
     }
-    t.context = tc;
-}
 
-ThreadContext *
-System::Threads::findFree()
-{
-    for (auto &thread: threads) {
-        if (thread.context->status() == ThreadContext::Halted)
-            return thread.context;
-    }
-    return nullptr;
-}
-
-int
-System::Threads::numRunning() const
-{
-    int count = 0;
-    for (auto &thread: threads) {
-        auto status = thread.context->status();
-        if (status != ThreadContext::Halted &&
-                status != ThreadContext::Halting) {
-            count++;
+    void
+    System::Threads::replace(ThreadContext *tc, ContextID id)
+    {
+        auto &t = thread(id);
+        panic_if(!t.context, "Can't replace a context which doesn't exist.");
+        if (t.resumeEvent->scheduled())
+        {
+            Tick when = t.resumeEvent->when();
+            t.context->getCpuPtr()->deschedule(t.resumeEvent);
+            tc->getCpuPtr()->schedule(t.resumeEvent, when);
         }
-    }
-    return count;
-}
-
-void
-System::Threads::quiesce(ContextID id)
-{
-    auto &t = thread(id);
-    [[maybe_unused]] BaseCPU *cpu = t.context->getCpuPtr();
-    DPRINTFS(Quiesce, cpu, "quiesce()\n");
-    t.quiesce();
-}
-
-void
-System::Threads::quiesceTick(ContextID id, Tick when)
-{
-    auto &t = thread(id);
-    BaseCPU *cpu = t.context->getCpuPtr();
-
-    DPRINTFS(Quiesce, cpu, "quiesceTick until %u\n", when);
-    t.quiesce();
-
-    cpu->reschedule(t.resumeEvent, when, true);
-}
-
-int System::numSystemsRunning = 0;
-
-System::System(const Params &p)
-    : SimObject(p), _systemPort("system_port", this),
-      multiThread(p.multi_thread),
-      init_param(p.init_param),
-      physProxy(_systemPort, p.cache_line_size),
-      workload(p.workload),
-      physmem(name() + ".physmem", p.memories, p.mmap_using_noreserve,
-              p.shared_backstore, p.auto_unlink_shared_backstore),
-      ShadowRomRanges(p.shadow_rom_ranges.begin(),
-                      p.shadow_rom_ranges.end()),
-      memoryMode(p.mem_mode),
-      _cacheLineSize(p.cache_line_size),
-      numWorkIds(p.num_work_ids),
-      thermalModel(p.thermal_model),
-      _m5opRange(p.m5ops_base ?
-                 RangeSize(p.m5ops_base, 0x10000) :
-                 AddrRange(1, 0)), // Create an empty range if disabled
-      redirectPaths(p.redirect_paths)
-{
-    panic_if(!workload, "No workload set for system %s "
-            "(could use StubWorkload?).", name());
-    
-    //  yqy mark
-    // printf("system construceted!!\n");
-    workload->setSystem(this);
-    
-    // add self to global system list
-    systemList.push_back(this);
-
-    // check if the cache line size is a value known to work
-    if (_cacheLineSize != 16 && _cacheLineSize != 32 &&
-        _cacheLineSize != 64 && _cacheLineSize != 128) {
-        warn_once("Cache line size is neither 16, 32, 64 nor 128 bytes.\n");
+        t.context = tc;
     }
 
-    // Get the generic system requestor IDs
-    [[maybe_unused]] RequestorID tmp_id;
-    tmp_id = getRequestorId(this, "writebacks");
-    assert(tmp_id == Request::wbRequestorId);
-    tmp_id = getRequestorId(this, "functional");
-    assert(tmp_id == Request::funcRequestorId);
-    tmp_id = getRequestorId(this, "interrupt");
-    assert(tmp_id == Request::intRequestorId);
-
-    // increment the number of running systems
-    numSystemsRunning++;
-
-    // Set back pointers to the system in all memories
-    for (int x = 0; x < params().memories.size(); x++)
-        params().memories[x]->system(this);
-}
-
-System::~System()
-{
-    for (uint32_t j = 0; j < numWorkIds; j++)
-        delete workItemStats[j];
-}
-
-Port &
-System::getPort(const std::string &if_name, PortID idx)
-{
-    // no need to distinguish at the moment (besides checking)
-    return _systemPort;
-}
-
-void
-System::setMemoryMode(enums::MemoryMode mode)
-{
-    assert(drainState() == DrainState::Drained);
-    memoryMode = mode;
-}
-
-void
-System::registerThreadContext(ThreadContext *tc)
-{
-    threads.insert(tc);
-
-    workload->registerThreadContext(tc);
-
-    for (auto *e: liveEvents)
-        tc->schedule(e);
-}
-
-bool
-System::schedule(PCEvent *event)
-{
-    bool all = true;
-    liveEvents.push_back(event);
-    for (auto *tc: threads)
-        all = tc->schedule(event) && all;
-    return all;
-}
-
-bool
-System::remove(PCEvent *event)
-{
-    bool all = true;
-    liveEvents.remove(event);
-    for (auto *tc: threads)
-        all = tc->remove(event) && all;
-    return all;
-}
-
-void
-System::replaceThreadContext(ThreadContext *tc, ContextID context_id)
-{
-    auto *otc = threads[context_id];
-    threads.replace(tc, context_id);
-
-    workload->replaceThreadContext(tc);
-
-    for (auto *e: liveEvents) {
-        otc->remove(e);
-        tc->schedule(e);
-    }
-}
-
-Addr
-System::memSize() const
-{
-    return physmem.totalSize();
-}
-
-bool
-System::isMemAddr(Addr addr) const
-{
-    return physmem.isMemAddr(addr);
-}
-
-void
-System::addDeviceMemory(RequestorID requestor_id,
-    memory::AbstractMemory *deviceMemory)
-{
-    deviceMemMap[requestor_id].push_back(deviceMemory);
-}
-
-bool
-System::isDeviceMemAddr(const PacketPtr& pkt) const
-{
-    if (!deviceMemMap.count(pkt->requestorId())) {
-        return false;
+    ThreadContext *
+    System::Threads::findFree()
+    {
+        for (auto &thread : threads)
+        {
+            if (thread.context->status() == ThreadContext::Halted)
+                return thread.context;
+        }
+        return nullptr;
     }
 
-    return (getDeviceMemory(pkt) != nullptr);
-}
+    int
+    System::Threads::numRunning() const
+    {
+        int count = 0;
+        for (auto &thread : threads)
+        {
+            auto status = thread.context->status();
+            if (status != ThreadContext::Halted &&
+                status != ThreadContext::Halting)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
 
-memory::AbstractMemory *
-System::getDeviceMemory(const PacketPtr& pkt) const
-{
-    const RequestorID& rid = pkt->requestorId();
+    void
+    System::Threads::quiesce(ContextID id)
+    {
+        auto &t = thread(id);
+        [[maybe_unused]] BaseCPU *cpu = t.context->getCpuPtr();
+        DPRINTFS(Quiesce, cpu, "quiesce()\n");
+        t.quiesce();
+    }
 
-    panic_if(!deviceMemMap.count(rid),
-             "No device memory found for Requestor %d\n", rid);
+    void
+    System::Threads::quiesceTick(ContextID id, Tick when)
+    {
+        auto &t = thread(id);
+        BaseCPU *cpu = t.context->getCpuPtr();
 
-    for (auto& mem : deviceMemMap.at(rid)) {
-        if (pkt->getAddrRange().isSubset(mem->getAddrRange())) {
-            return mem;
+        DPRINTFS(Quiesce, cpu, "quiesceTick until %u\n", when);
+        t.quiesce();
+
+        cpu->reschedule(t.resumeEvent, when, true);
+    }
+
+    int System::numSystemsRunning = 0;
+
+    System::System(const Params &p)
+        : SimObject(p), _systemPort("system_port", this),
+          multiThread(p.multi_thread),
+          init_param(p.init_param),
+          physProxy(_systemPort, p.cache_line_size),
+          workload(p.workload),
+          physmem(name() + ".physmem", p.memories, p.mmap_using_noreserve,
+                  p.shared_backstore, p.auto_unlink_shared_backstore),
+          ShadowRomRanges(p.shadow_rom_ranges.begin(),
+                          p.shadow_rom_ranges.end()),
+          memoryMode(p.mem_mode),
+          _cacheLineSize(p.cache_line_size),
+          numWorkIds(p.num_work_ids),
+          thermalModel(p.thermal_model),
+          _m5opRange(p.m5ops_base ? RangeSize(p.m5ops_base, 0x10000) : AddrRange(1, 0)), // Create an empty range if disabled
+          redirectPaths(p.redirect_paths)
+    {
+        panic_if(!workload, "No workload set for system %s "
+                            "(could use StubWorkload?).",
+                 name());
+
+        //  yqy mark
+        // printf("system construceted!!\n");
+        workload->setSystem(this);
+
+        // add self to global system list
+        systemList.push_back(this);
+
+        // check if the cache line size is a value known to work
+        if (_cacheLineSize != 16 && _cacheLineSize != 32 &&
+            _cacheLineSize != 64 && _cacheLineSize != 128)
+        {
+            warn_once("Cache line size is neither 16, 32, 64 nor 128 bytes.\n");
+        }
+
+        // Get the generic system requestor IDs
+        [[maybe_unused]] RequestorID tmp_id;
+        tmp_id = getRequestorId(this, "writebacks");
+        assert(tmp_id == Request::wbRequestorId);
+        tmp_id = getRequestorId(this, "functional");
+        assert(tmp_id == Request::funcRequestorId);
+        tmp_id = getRequestorId(this, "interrupt");
+        assert(tmp_id == Request::intRequestorId);
+
+        // increment the number of running systems
+        numSystemsRunning++;
+
+        // Set back pointers to the system in all memories
+        for (int x = 0; x < params().memories.size(); x++)
+            params().memories[x]->system(this);
+    }
+
+    System::~System()
+    {
+        for (uint32_t j = 0; j < numWorkIds; j++)
+            delete workItemStats[j];
+    }
+
+    Port &
+    System::getPort(const std::string &if_name, PortID idx)
+    {
+        // no need to distinguish at the moment (besides checking)
+        return _systemPort;
+    }
+
+    void
+    System::setMemoryMode(enums::MemoryMode mode)
+    {
+        assert(drainState() == DrainState::Drained);
+        memoryMode = mode;
+    }
+
+    void
+    System::registerThreadContext(ThreadContext *tc)
+    {
+        threads.insert(tc);
+
+        workload->registerThreadContext(tc);
+
+        for (auto *e : liveEvents)
+            tc->schedule(e);
+    }
+
+    bool
+    System::schedule(PCEvent *event)
+    {
+        bool all = true;
+        liveEvents.push_back(event);
+        for (auto *tc : threads)
+            all = tc->schedule(event) && all;
+        return all;
+    }
+
+    bool
+    System::remove(PCEvent *event)
+    {
+        bool all = true;
+        liveEvents.remove(event);
+        for (auto *tc : threads)
+            all = tc->remove(event) && all;
+        return all;
+    }
+
+    void
+    System::replaceThreadContext(ThreadContext *tc, ContextID context_id)
+    {
+        auto *otc = threads[context_id];
+        threads.replace(tc, context_id);
+
+        workload->replaceThreadContext(tc);
+
+        for (auto *e : liveEvents)
+        {
+            otc->remove(e);
+            tc->schedule(e);
         }
     }
 
-    return nullptr;
-}
-
-void
-System::serialize(CheckpointOut &cp) const
-{
-    for (auto &t: threads.threads) {
-        Tick when = 0;
-        if (t.resumeEvent && t.resumeEvent->scheduled())
-            when = t.resumeEvent->when();
-        ContextID id = t.context->contextId();
-        paramOut(cp, csprintf("quiesceEndTick_%d", id), when);
+    Addr
+    System::memSize() const
+    {
+        return physmem.totalSize();
     }
 
-    // also serialize the memories in the system
-    physmem.serializeSection(cp, "physmem");
-}
+    bool
+    System::isMemAddr(Addr addr) const
+    {
+        return physmem.isMemAddr(addr);
+    }
 
+    void
+    System::addDeviceMemory(RequestorID requestor_id,
+                            memory::AbstractMemory *deviceMemory)
+    {
+        deviceMemMap[requestor_id].push_back(deviceMemory);
+    }
 
-void
-System::unserialize(CheckpointIn &cp)
-{
-    for (auto &t: threads.threads) {
-        Tick when = 0;
-        ContextID id = t.context->contextId();
-        if (!optParamIn(cp, csprintf("quiesceEndTick_%d", id), when) ||
-                !when || !t.resumeEvent) {
-            continue;
+    bool
+    System::isDeviceMemAddr(const PacketPtr &pkt) const
+    {
+        if (!deviceMemMap.count(pkt->requestorId()))
+        {
+            return false;
         }
-        t.context->getCpuPtr()->schedule(t.resumeEvent, when);
+
+        return (getDeviceMemory(pkt) != nullptr);
     }
 
-    // also unserialize the memories in the system
-    physmem.unserializeSection(cp, "physmem");
-}
+    memory::AbstractMemory *
+    System::getDeviceMemory(const PacketPtr &pkt) const
+    {
+        const RequestorID &rid = pkt->requestorId();
 
-void
-System::regStats()
-{
-    SimObject::regStats();
+        panic_if(!deviceMemMap.count(rid),
+                 "No device memory found for Requestor %d\n", rid);
 
-    for (uint32_t j = 0; j < numWorkIds ; j++) {
-        workItemStats[j] = new statistics::Histogram(this);
-        std::stringstream namestr;
-        ccprintf(namestr, "work_item_type%d", j);
-        workItemStats[j]->init(20)
-                         .name(namestr.str())
-                         .desc("Run time stat for" + namestr.str())
-                         .prereq(*workItemStats[j]);
-    }
-}
+        for (auto &mem : deviceMemMap.at(rid))
+        {
+            if (pkt->getAddrRange().isSubset(mem->getAddrRange()))
+            {
+                return mem;
+            }
+        }
 
-void
-System::workItemEnd(uint32_t tid, uint32_t workid)
-{
-    std::pair<uint32_t,uint32_t> p(tid, workid);
-    if (!lastWorkItemStarted.count(p))
-        return;
-
-    Tick samp = curTick() - lastWorkItemStarted[p];
-    DPRINTF(WorkItems, "Work item end: %d\t%d\t%lld\n", tid, workid, samp);
-
-    if (workid >= numWorkIds)
-        fatal("Got workid greater than specified in system configuration\n");
-
-    workItemStats[workid]->sample(samp);
-    lastWorkItemStarted.erase(p);
-}
-
-bool
-System::trapToGdb(int signal, ContextID ctx_id) const
-{
-    return workload->trapToGdb(signal, ctx_id);
-}
-
-void
-System::printSystems()
-{
-    std::ios::fmtflags flags(std::cerr.flags());
-
-    std::vector<System *>::iterator i = systemList.begin();
-    std::vector<System *>::iterator end = systemList.end();
-    for (; i != end; ++i) {
-        System *sys = *i;
-        std::cerr << "System " << sys->name() << ": " << std::hex << sys
-                  << std::endl;
+        return nullptr;
     }
 
-    std::cerr.flags(flags);
-}
+    void
+    System::serialize(CheckpointOut &cp) const
+    {
+        for (auto &t : threads.threads)
+        {
+            Tick when = 0;
+            if (t.resumeEvent && t.resumeEvent->scheduled())
+                when = t.resumeEvent->when();
+            ContextID id = t.context->contextId();
+            paramOut(cp, csprintf("quiesceEndTick_%d", id), when);
+        }
 
-void
-printSystems()
-{
-    System::printSystems();
-}
-
-std::string
-System::stripSystemName(const std::string& requestor_name) const
-{
-    if (startswith(requestor_name, name())) {
-        return requestor_name.substr(name().size() + 1);
-    } else {
-        return requestor_name;
+        // also serialize the memories in the system
+        physmem.serializeSection(cp, "physmem");
     }
-}
 
-RequestorID
-System::lookupRequestorId(const SimObject* obj) const
-{
-    RequestorID id = Request::invldRequestorId;
+    void
+    System::unserialize(CheckpointIn &cp)
+    {
+        for (auto &t : threads.threads)
+        {
+            Tick when = 0;
+            ContextID id = t.context->contextId();
+            if (!optParamIn(cp, csprintf("quiesceEndTick_%d", id), when) ||
+                !when || !t.resumeEvent)
+            {
+                continue;
+            }
+            t.context->getCpuPtr()->schedule(t.resumeEvent, when);
+        }
 
-    // number of occurrences of the SimObject pointer
-    // in the requestor list.
-    auto obj_number = 0;
+        // also unserialize the memories in the system
+        physmem.unserializeSection(cp, "physmem");
+    }
 
-    for (int i = 0; i < requestors.size(); i++) {
-        if (requestors[i].obj == obj) {
-            id = i;
-            obj_number++;
+    void
+    System::regStats()
+    {
+        SimObject::regStats();
+
+        for (uint32_t j = 0; j < numWorkIds; j++)
+        {
+            workItemStats[j] = new statistics::Histogram(this);
+            std::stringstream namestr;
+            ccprintf(namestr, "work_item_type%d", j);
+            workItemStats[j]->init(20).name(namestr.str()).desc("Run time stat for" + namestr.str()).prereq(*workItemStats[j]);
         }
     }
 
-    fatal_if(obj_number > 1,
-        "Cannot lookup RequestorID by SimObject pointer: "
-        "More than one requestor is sharing the same SimObject\n");
+    void
+    System::workItemEnd(uint32_t tid, uint32_t workid)
+    {
+        std::pair<uint32_t, uint32_t> p(tid, workid);
+        if (!lastWorkItemStarted.count(p))
+            return;
 
-    return id;
-}
+        Tick samp = curTick() - lastWorkItemStarted[p];
+        DPRINTF(WorkItems, "Work item end: %d\t%d\t%lld\n", tid, workid, samp);
 
-RequestorID
-System::lookupRequestorId(const std::string& requestor_name) const
-{
-    std::string name = stripSystemName(requestor_name);
+        if (workid >= numWorkIds)
+            fatal("Got workid greater than specified in system configuration\n");
 
-    for (int i = 0; i < requestors.size(); i++) {
-        if (requestors[i].req_name == name) {
-            return i;
+        workItemStats[workid]->sample(samp);
+        lastWorkItemStarted.erase(p);
+    }
+
+    bool
+    System::trapToGdb(int signal, ContextID ctx_id) const
+    {
+        return workload->trapToGdb(signal, ctx_id);
+    }
+
+    void
+    System::printSystems()
+    {
+        std::ios::fmtflags flags(std::cerr.flags());
+
+        std::vector<System *>::iterator i = systemList.begin();
+        std::vector<System *>::iterator end = systemList.end();
+        for (; i != end; ++i)
+        {
+            System *sys = *i;
+            std::cerr << "System " << sys->name() << ": " << std::hex << sys
+                      << std::endl;
+        }
+
+        std::cerr.flags(flags);
+    }
+
+    void
+    printSystems()
+    {
+        System::printSystems();
+    }
+
+    std::string
+    System::stripSystemName(const std::string &requestor_name) const
+    {
+        if (startswith(requestor_name, name()))
+        {
+            return requestor_name.substr(name().size() + 1);
+        }
+        else
+        {
+            return requestor_name;
         }
     }
 
-    return Request::invldRequestorId;
-}
+    RequestorID
+    System::lookupRequestorId(const SimObject *obj) const
+    {
+        RequestorID id = Request::invldRequestorId;
 
-RequestorID
-System::getGlobalRequestorId(const std::string& requestor_name)
-{
-    return _getRequestorId(nullptr, requestor_name);
-}
+        // number of occurrences of the SimObject pointer
+        // in the requestor list.
+        auto obj_number = 0;
 
-RequestorID
-System::getRequestorId(const SimObject* requestor, std::string subrequestor)
-{
-    auto requestor_name = leafRequestorName(requestor, subrequestor);
-    return _getRequestorId(requestor, requestor_name);
-}
+        for (int i = 0; i < requestors.size(); i++)
+        {
+            if (requestors[i].obj == obj)
+            {
+                id = i;
+                obj_number++;
+            }
+        }
 
-RequestorID
-System::_getRequestorId(const SimObject* requestor,
-                     const std::string& requestor_name)
-{
-    std::string name = stripSystemName(requestor_name);
+        fatal_if(obj_number > 1,
+                 "Cannot lookup RequestorID by SimObject pointer: "
+                 "More than one requestor is sharing the same SimObject\n");
 
-    // CPUs in switch_cpus ask for ids again after switching
-    for (int i = 0; i < requestors.size(); i++) {
-        if (requestors[i].req_name == name) {
-            return i;
+        return id;
+    }
+
+    RequestorID
+    System::lookupRequestorId(const std::string &requestor_name) const
+    {
+        std::string name = stripSystemName(requestor_name);
+
+        for (int i = 0; i < requestors.size(); i++)
+        {
+            if (requestors[i].req_name == name)
+            {
+                return i;
+            }
+        }
+
+        return Request::invldRequestorId;
+    }
+
+    RequestorID
+    System::getGlobalRequestorId(const std::string &requestor_name)
+    {
+        return _getRequestorId(nullptr, requestor_name);
+    }
+
+    RequestorID
+    System::getRequestorId(const SimObject *requestor, std::string subrequestor)
+    {
+        printf("%s\n", subrequestor.c_str());
+        auto requestor_name = leafRequestorName(requestor, subrequestor);
+        return _getRequestorId(requestor, requestor_name);
+    }
+
+    RequestorID
+    System::_getRequestorId(const SimObject *requestor, const std::string &requestor_name)
+    {
+        std::string name = stripSystemName(requestor_name);
+        if (strstr(requestor_name.c_str(), "sDMmanager"))
+        {
+            printf("sDMmanager is requesting id\n");
+        }
+        // CPUs in switch_cpus ask for ids again after switching
+        for (int i = 0; i < requestors.size(); i++)
+        {
+            if (requestors[i].req_name == name)
+            {
+                return i;
+            }
+        }
+
+        // Verify that the statistics haven't been enabled yet
+        // Otherwise objects will have sized their stat buckets and
+        // they will be too small
+
+        if (statistics::enabled())
+        {
+            fatal("Can't request a requestorId after regStats(). "
+                  "You must do so in init().\n");
+        }
+
+        // Generate a new RequestorID incrementally
+        RequestorID requestor_id = requestors.size();
+
+        // Append the new Requestor metadata to the group of system Requestors.
+        requestors.emplace_back(requestor, name, requestor_id);
+
+        // yqy mark
+        printf("[%ld]system.cc Requestor %s has id %d\n", curTick(), requestor_name.c_str(), requestors.back().id);
+
+        return requestors.back().id;
+    }
+
+    std::string
+    System::leafRequestorName(const SimObject *requestor,
+                              const std::string &subrequestor)
+    {
+        if (subrequestor.empty())
+        {
+            return requestor->name();
+        }
+        else
+        {
+            // Get the full requestor name by appending the subrequestor name to
+            // the root SimObject requestor name
+            return requestor->name() + "." + subrequestor;
         }
     }
 
-    // Verify that the statistics haven't been enabled yet
-    // Otherwise objects will have sized their stat buckets and
-    // they will be too small
+    std::string
+    System::getRequestorName(RequestorID requestor_id)
+    {
+        if (requestor_id >= requestors.size())
+            fatal("Invalid requestor_id passed to getRequestorName()\n");
 
-    if (statistics::enabled()) {
-        fatal("Can't request a requestorId after regStats(). "
-                "You must do so in init().\n");
+        const auto &requestor_info = requestors[requestor_id];
+        return requestor_info.req_name;
     }
-
-    // Generate a new RequestorID incrementally
-    RequestorID requestor_id = requestors.size();
-
-    // Append the new Requestor metadata to the group of system Requestors.
-    requestors.emplace_back(requestor, name, requestor_id);
-
-    return requestors.back().id;
-}
-
-std::string
-System::leafRequestorName(const SimObject* requestor,
-                       const std::string& subrequestor)
-{
-    if (subrequestor.empty()) {
-        return requestor->name();
-    } else {
-        // Get the full requestor name by appending the subrequestor name to
-        // the root SimObject requestor name
-        return requestor->name() + "." + subrequestor;
-    }
-}
-
-std::string
-System::getRequestorName(RequestorID requestor_id)
-{
-    if (requestor_id >= requestors.size())
-        fatal("Invalid requestor_id passed to getRequestorName()\n");
-
-    const auto& requestor_info = requestors[requestor_id];
-    return requestor_info.req_name;
-}
 
 } // namespace gem5

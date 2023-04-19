@@ -35,70 +35,71 @@
 namespace gem5
 {
 
-class SEWorkload : public Workload
-{
-  protected:
-    /** Memory allocation objects for all physical memories in the system. */
-    MemPools memPools;
-
-  public:
-    using Params = SEWorkloadParams;
-
-    SEWorkload(const Params &p, Addr page_shift=0);
-
-    void setSystem(System *sys) override;
-
-    Addr
-    getEntry() const override
+    class SEWorkload : public Workload
     {
-        // This object represents the OS, not the individual processes running
-        // within it.
-        panic("No workload entry point for syscall emulation mode.");
-    }
+        //   protected:
+        /** Memory allocation objects for all physical memories in the system. */
+    public:
+        MemPools memPools;
 
-    loader::Arch
-    getArch() const override
-    {
-        // ISA specific subclasses should implement this method.
-        // This implemenetation is just to avoid having to implement those for
-        // now, and will be removed in the future.
-        panic("SEWorkload::getArch() not implemented.");
-    }
+    public:
+        using Params = SEWorkloadParams;
 
-    const loader::SymbolTable &
-    symtab(ThreadContext *) override
-    {
-        // This object represents the OS, not the individual processes running
-        // within it.
-        panic("No workload symbol table for syscall emulation mode.");
-    }
+        SEWorkload(const Params &p, Addr page_shift = 0);
 
-    bool
-    insertSymbol(const loader::Symbol &symbol) override
-    {
-        // This object represents the OS, not the individual processes running
-        // within it.
-        panic("No workload symbol table for syscall emulation mode.");
-    }
+        void setSystem(System *sys) override;
 
-    void serialize(CheckpointOut &cp) const override;
-    void unserialize(CheckpointIn &cp) override;
+        Addr
+        getEntry() const override
+        {
+            // This object represents the OS, not the individual processes running
+            // within it.
+            panic("No workload entry point for syscall emulation mode.");
+        }
 
-    void syscall(ThreadContext *tc) override;
+        loader::Arch
+        getArch() const override
+        {
+            // ISA specific subclasses should implement this method.
+            // This implemenetation is just to avoid having to implement those for
+            // now, and will be removed in the future.
+            panic("SEWorkload::getArch() not implemented.");
+        }
 
-    // For now, assume the only type of events are system calls.
-    void event(ThreadContext *tc) override { syscall(tc); }
+        const loader::SymbolTable &
+        symtab(ThreadContext *) override
+        {
+            // This object represents the OS, not the individual processes running
+            // within it.
+            panic("No workload symbol table for syscall emulation mode.");
+        }
 
-    Addr allocPhysPages(int npages, int pool_id=0);
-    /*
-     * Define a new allocation function
-     * uses the available memory pool ids vector as an argument
-     */
-    Addr allocPhysPages(int npages, std::vector<int>& pools_id);
+        bool
+        insertSymbol(const loader::Symbol &symbol) override
+        {
+            // This object represents the OS, not the individual processes running
+            // within it.
+            panic("No workload symbol table for syscall emulation mode.");
+        }
 
-    Addr memSize(int pool_id=0) const;
-    Addr freeMemSize(int pool_id=0) const;
-};
+        void serialize(CheckpointOut &cp) const override;
+        void unserialize(CheckpointIn &cp) override;
+
+        void syscall(ThreadContext *tc) override;
+
+        // For now, assume the only type of events are system calls.
+        void event(ThreadContext *tc) override { syscall(tc); }
+
+        Addr allocPhysPages(int npages, int pool_id = 0);
+        /*
+         * Define a new allocation function
+         * uses the available memory pool ids vector as an argument
+         */
+        Addr allocPhysPages(int npages, std::vector<int> &pools_id);
+
+        Addr memSize(int pool_id = 0) const;
+        Addr freeMemSize(int pool_id = 0) const;
+    };
 
 } // namespace gem5
 

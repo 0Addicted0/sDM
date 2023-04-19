@@ -37,5 +37,5 @@ class sDMmanager(ClockedObject):
     cxx_header = "mem/sDM/sDM.hh"
     cxx_class = "gem5::sDM::sDMmanager"
     remote_pool_id = Param.Int(0, "the pool id of remote memory")
-    mem_side = RequestPort("memory side port, send requests")
+    # mem_side = RequestPort("memory side port, send requests")
     system = Param.System(Parent.any, "System we belong to")

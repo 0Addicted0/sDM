@@ -247,44 +247,51 @@ namespace gem5
         class sDMmanager : public ClockedObject
         {
         public:
-            class sDMPort : public RequestPort
-            {
-            public:
-                sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager), sdmmanager(_sdmmanager)
-                {
-                }
+            // class sDMPort : public RequestPort
+            // {
+            // public:
+            //     sDMPort(const std::string &name, sDMmanager *owner) : RequestPort(name, owner),
+            //                                                           sdmmanager(owner)
+            //     {
+            //     }
+            //     // sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager),
+            //     //                                                              sdmmanager(_sdmmanager)
+            //     // {
+            //     //     printf("sDMPort init\n");
+            //     // }
 
-            protected:
-                sDMmanager *sdmmanager;
+            // protected:
+            //     sDMmanager *sdmmanager;
 
-                bool recvTimingResp(PacketPtr pkt)
-                {
-                    sdmmanager->pkt_recv = pkt;
-                    sdmmanager->has_recv = 1;
-                    return true;
-                }
-                void recvReqRetry()
-                {
-                    panic("%s does not expect a retry\n", name());
-                }
-            };
+            //     bool recvTimingResp(PacketPtr pkt)
+            //     {
+            //         sdmmanager->pkt_recv = pkt;
+            //         sdmmanager->has_recv = 1;
+            //         return true;
+            //     }
+            //     void recvReqRetry()
+            //     {
+            //         panic("%s does not expect a retry\n", name());
+            //     }
+            // };
 
             bool has_recv = 0;
             PacketPtr pkt_recv = nullptr;
-            sDMPort memPort;
+            // sDMPort memPort;
             RequestorID requestorId() { return _requestorId; }
 
-        private:
+            // private:
+        public:
             // 数据页页指针集指针
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
             RequestorID _requestorId;
 
-            sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
-            int remote_pool_id;      // 可用本地内存池(内存段)编号
-            int local_pool_id;       // 记录每个process/workload的本地pool的编号
-            MemPools *mem_pools;     // 实例化时的内存池指针
-            // Process *proc;        // 是为了使用pTable而引入与实际情况是不相符的
+            sdmIDtype sdm_space_cnt;          // 全局单增,2^64永远不会耗尽, start from 1
+            int remote_pool_id;               // 可用本地内存池(内存段)编号
+            int local_pool_id;                // 记录每个process/workload的本地pool的编号
+            MemPools *mem_pools;              // 实例化时的内存池指针
+            Process *process;                 // 是为了使用pTable而引入与实际情况是不相符的
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
@@ -298,7 +305,6 @@ namespace gem5
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
             void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey);
 
-        public:
             sDMmanager(const sDMmanagerParams &p);
 
             sdmIDtype isContained(Addr paddr);
@@ -310,13 +316,13 @@ namespace gem5
             void write(PacketPtr pkt);
             void read(PacketPtr pkt);
 
-            Port &
-            getPort(const std::string &if_name, PortID idx = InvalidPortID) override
-            {
-                if (if_name == "mem_side")
-                    return memPort;
-                return sDMmanager::getPort(if_name, idx);
-            }
+            // Port &
+            // getPort(const std::string &if_name, PortID idx = InvalidPortID) override
+            // {
+            //     if (if_name == "mem_side")
+            //         return memPort;
+            //     return sDMmanager::getPort(if_name, idx);
+            // }
         };
     }
 }
