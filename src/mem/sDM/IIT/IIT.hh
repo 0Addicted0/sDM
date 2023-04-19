@@ -455,4 +455,4 @@ namespace gem5
         bool counter_cmp(CL_Counter a, CL_Counter b);
     }
 }
-#endif
+#endif // _IIT_HH_

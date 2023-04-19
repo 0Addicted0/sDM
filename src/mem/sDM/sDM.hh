@@ -19,18 +19,19 @@
 #include "./IIT/IIT.hh"
 #include "CME/CME.hh"
 
-#include <map>
-#include <cassert>
-#include <cstdio>
-#include <cstring>
-#include <vector>
-
+#include "params/sDMmanager.hh"
 #include "base/types.hh"
 #include "../../sim/system.hh"
 #include "../../sim/mem_pool.hh"
 #include "../packet.hh"
 #include "../port.hh"
 #include "../../sim/clocked_object.hh"
+
+#include <map>
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <vector>
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -46,6 +47,8 @@ namespace gem5
 {
     namespace sDM
     {
+        // struct sDMmanagerParams;
+
         typedef uint64_t sdmIDtype;                // sdm空间编号类型 u64
         typedef uint64_t sdm_size;                 // sdm保护的数据的大小
         typedef uint8_t *sdm_dataPtr;              // 数据区指针
@@ -53,8 +56,9 @@ namespace gem5
         typedef uint8_t sdm_CMEKey[SM3_KEY_SIZE];  // sdm space cme密钥
         typedef uint8_t sdm_HMAC[HMAC_SIZE];       // 一个SM3 HASH 256bit
         typedef uint8_t CL[CL_SIZE];
-        uint64_t ceil(uint64_t a, uint64_t b);
-        uint64_t getIITsize(uint64_t data_size);
+        extern uint64_t ceil(uint64_t a, uint64_t b);
+        // 可移入sDMmanager的方法中
+        extern uint64_t getIITsize(uint64_t data_size);
         /**
          * @author
          * yqy
@@ -246,12 +250,19 @@ namespace gem5
             class sDMPort : public RequestPort
             {
             public:
-                sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager), sdmmanager(_sdmmanager) {}
+                sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager), sdmmanager(_sdmmanager)
+                {
+                }
 
             protected:
                 sDMmanager *sdmmanager;
 
-                bool recvTimingResp(PacketPtr pkt);
+                bool recvTimingResp(PacketPtr pkt)
+                {
+                    sdmmanager->pkt_recv = pkt;
+                    sdmmanager->has_recv = 1;
+                    return true;
+                }
                 void recvReqRetry()
                 {
                     panic("%s does not expect a retry\n", name());
@@ -267,14 +278,15 @@ namespace gem5
             // 数据页页指针集指针
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
+            RequestorID _requestorId;
+
             sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
             int remote_pool_id;      // 可用本地内存池(内存段)编号
             int local_pool_id;       // 记录每个process/workload的本地pool的编号
             MemPools *mem_pools;     // 实例化时的内存池指针
-            // Process *proc;                                                                    // 是为了使用pTable而引入与实际情况是不相符的
+            // Process *proc;        // 是为了使用pTable而引入与实际情况是不相符的
             std::vector<sdm_space> sdm_table; // id->sdm
-            // 拦截每次的访存的vaddr时，查找此表对应到相应的space id
-            // vaddr <==> (page_num,space id)
+            // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
             void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
@@ -285,12 +297,10 @@ namespace gem5
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
             void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey);
-            RequestorID _requestorId;
 
         public:
             sDMmanager(const sDMmanagerParams &p);
-            // sDMmanager(int remote_pool_id, int local_pool_id, MemPools *mem_pools);
-            ~sDMmanager();
+
             sdmIDtype isContained(Addr paddr);
             bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
@@ -310,4 +320,4 @@ namespace gem5
         };
     }
 }
-#endif
+#endif // _SDM_HH_

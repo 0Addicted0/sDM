@@ -35,12 +35,12 @@ namespace gem5
 {
 
 SimpleMemobj::SimpleMemobj(const SimpleMemobjParams &params) :
-    ClockedObject(params),//+by yqy
+    ClockedObject(params),
     latency(params.latency),//+by yqy
     instPort(params.name + ".inst_port", this),
     dataPort(params.name + ".data_port", this),
     memPort(params.name + ".mem_side", this),
-    blocked(false),stats(this)//+by yqy
+    blocked(false),stats(this)
 {
 }
 

@@ -1,3 +1,5 @@
+#ifndef _SDM_DEF_HH_
+#define _SDM_DEF_HH_
 #include <stdint.h>
 
 #define BYTE2BIT 8
@@ -35,8 +37,8 @@
 #define IIT_MID_MINOR_RESERVED_MASK 0x3F // 保留节点中的所有计数器相关位
 #define IIT_LEAF_MINOR_MAXM 0x0FFF       // 叶节点的major counter最大值
 #define IIT_MID_MINOR_MAXM 0x3F          // 中间节点点的minor counter最大值
-#define LITTLE_ENDIAN 1                  // 使用小端模式嵌入
-#define SM3_KEY_SIZE SM3_len / 8         // 基于sm3的hmac密钥
+// #define LITTLE_ENDIAN 1               // 使用小端模式嵌入 conflict with gem5
+#define SM3_KEY_SIZE SM3_len / BYTE2BIT // 基于sm3的hmac密钥
 #define HASH_KEY_TYPE 0
 #define CME_KEY_TYPE 1
 namespace gem5
@@ -46,3 +48,4 @@ namespace gem5
         typedef uint64_t Addr; // 64位地址类型
     }
 }
+#endif // _SDM_DEF_HH_

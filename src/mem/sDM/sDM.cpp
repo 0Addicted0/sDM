@@ -1,4 +1,5 @@
 #include "sDM.hh"
+
 #include <algorithm>
 
 namespace gem5
@@ -49,29 +50,31 @@ namespace gem5
          * @attention 待传入参数
          */
         sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
-                                                                  _requestorId(params.system->getRequestorId(this)),
-                                                                  memPort(params.name + ".mem_side", this),
-                                                                  remote_pool_id(params.remote_pool_id)
-         {
+                                                                 memPort(params.name + ".mem_side", this),
+                                                                 _requestorId(params.system->getRequestorId(this)),
+                                                                 remote_pool_id(params.remote_pool_id)
+        {
             std::cout << "!!sDMmanager!!\n"
-                       << std::endl;
-         }
+                      << std::endl;
+        }
         /**
          * @brief
          * sDMmanager析构函数
          */
-        sDMmanager::~sDMmanager() {}
+        // sDMmanager::~sDMmanager() {}
         /**
          * @author psj
          * @brief 收到响应packet后记录pkt并向发送方通知已接收响应包
          * @return 返回是否成功收到响应packet
+         * @attention 未验证*
          */
         void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
         {
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createRead(req);
             pkt->dataDynamic(new uint8_t[byte_size]);
-            bool res = memPort.sendTimingReq(pkt);
+            // bool res = memPort.sendTimingReq(pkt);
+            memPort.sendTimingReq(pkt);
             // if (res)
             // {
             //     std::cout << "Successfully send timing request. Tick = " <<
@@ -99,7 +102,7 @@ namespace gem5
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createWrite(req);
             pkt->setData((const uint8_t *)data);
-            memPort.sendTimingReq(pkt);  //  packet mem[i]->gem5MemPtr->[i];...
+            memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
             return;
         }
         /**
@@ -139,11 +142,11 @@ namespace gem5
         {
             vaddr &= PAGE_ALIGN_MASK;
             auto it = sdm_paddr2id.lower_bound(vaddr);
-            if(it!=sdm_paddr2id.end() && it->first==vaddr)
+            if (it != sdm_paddr2id.end() && it->first == vaddr)
                 return it->second.second;
-            if(it!=sdm_paddr2id.begin())
+            if (it != sdm_paddr2id.begin())
                 it--;
-            if(it->first<=vaddr && vaddr<it->first+it->second.first)
+            if (it->first <= vaddr && vaddr < it->first + it->second.first)
                 return it->second.second;
             return 0;
         }
@@ -310,10 +313,10 @@ namespace gem5
         {
             Addr ptrPagePtr[lnpages];
             ptrPagePtr[0] = local_phy_list[0].start;
-            int cur = 0;     // 当前正在写第几个页面
-            int cur_seg = 0; // 当前正在使用第几个本地连续段
-            int cur_k = 1;   // 当前正在使用第几个本地连续段中的第几个
-            int seg_start;   // 当前段的其实页面下标
+            int cur = 0;       // 当前正在写第几个页面
+            int cur_seg = 0;   // 当前正在使用第几个本地连续段
+            int cur_k = 1;     // 当前正在使用第几个本地连续段中的第几个
+            int seg_start = 0; // 当前段的起始页面下标
             // 当前正在记录第几个页面数据对
             size_t cur_pair = 0;
             // 前面累积的物理空间逻辑大小
@@ -418,8 +421,8 @@ namespace gem5
         sDMmanager::sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size)
         {
             assert(data_byte_size && "data is empty");
-            assert((data_byte_size & (PAGE_SIZE - 1) == 0) &&
-                   (data_byte_size & (PAGE_SIZE - 1) == 0) &&
+            assert(((vaddr & (PAGE_SIZE - 1)) == 0) &&
+                   ((data_byte_size & (PAGE_SIZE - 1)) == 0) &&
                    "vaddr or size is not aligned pagesize");
             // 准备新空间的metadata
             sdm_space sp;
@@ -428,14 +431,14 @@ namespace gem5
             // data_size *= PAGE_SIZE;
             // 检查申请的虚拟空间是否已经存在于其他space中
             auto aft = sdm_paddr2id.lower_bound((Addr)(vaddr + data_size));
-            if(aft != sdm_paddr2id.begin())
+            if (aft != sdm_paddr2id.begin())
             {
                 aft--;
-                assert((aft->first + (aft->second.first)*PAGE_SIZE <= vaddr) && "overlapped");
+                assert((aft->first + (aft->second.first) * PAGE_SIZE <= vaddr) && "overlapped");
             }
-            else 
+            else
             {
-                assert((aft->first >= vaddr+data_byte_size) && "overlapped");
+                assert((aft->first >= vaddr + data_byte_size) && "overlapped");
             }
             // 2. 计算IIT树大小
             uint32_t h = 0;
@@ -546,7 +549,7 @@ namespace gem5
             // 1. HMAC校验
             iit_Node tmpLeaf;
             keyPathNode[0].erase_hash_tag(IIT_LEAF_TYPE, &tmpLeaf);
-            bool hmac_verified = hmac_verify(paddr, *rva, hmacAddr, id, hpg_data, &tmpLeaf, hash_key); // 该函数内会读取所在半页的加密数据到hpg_data[PAGE_SIZE/2]数组中
+            assert(hmac_verify(paddr, *rva, hmacAddr, id, hpg_data, &tmpLeaf, hash_key) && "HMAC verity failed"); // 该函数内会读取所在半页的加密数据到hpg_data[PAGE_SIZE/2]数组中
             // 2. iit校验
             int type = IIT_LEAF_TYPE;
             // paddr对应的缓存行位于上层节点的哪个计数器
@@ -587,6 +590,7 @@ namespace gem5
             Addr pktAddr;
             if (!pkt->req->getFlags().isSet(0x00000004)) // 该请求一定不来自程序本身
                 return;
+            pktAddr = pkt->req->getVaddr();
             sdmIDtype id = sDMmanager::isContained(pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
@@ -629,7 +633,7 @@ namespace gem5
             Addr pktAddr;
             if (!pkt->req->getFlags().isSet(0x00000004)) // 该请求一定不来自程序本身
                 return;
-
+            pktAddr = pkt->req->getVaddr();
             sdmIDtype id;
             id = isContained(pktAddr);
             if (!id) // 无需修改任何数据包
