@@ -26,6 +26,7 @@
 #include "../packet.hh"
 #include "../port.hh"
 #include "../../sim/clocked_object.hh"
+#include "../../sim/process.hh"
 
 #include <map>
 #include <cassert>
@@ -279,7 +280,7 @@ namespace gem5
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
             RequestorID _requestorId;
-
+            Process *process;
             sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
             int remote_pool_id;      // 可用本地内存池(内存段)编号
             int local_pool_id;       // 记录每个process/workload的本地pool的编号
@@ -296,7 +297,7 @@ namespace gem5
             bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
-            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey);
+            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list);
 
         public:
             sDMmanager(const sDMmanagerParams &p);

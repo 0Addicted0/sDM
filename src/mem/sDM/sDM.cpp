@@ -390,23 +390,126 @@ namespace gem5
             }
         }
         /**
-         * @author yqy
-         * @brief 初始化对应的sDM space
+         * @author: ys
+         * @description: sdm空间初始化函数
+         * @param {Addr} vaddr  数据的虚拟地址
+         * @param {size_t} byte_size    数据大小
+         * @param {sdm_CMEKey} ckey
+         * @param {sdm_hashKey} hkey
+         * @param {vector<phy_space_block>} r_hmac_phy_list 远端存放hmac的物理地址
+         * @param {vector<phy_space_block>} r_iit_phy_list 远端存放iit的物理地址
+         * @return {*}
          */
-        void
-        sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey)
+        void sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list)
         {
+
             // 向数据空间写入0
+
+            CL_Counter cl{0};
+            Addr addr = vaddr;
             for (int i = 0; i < byte_size / CL_SIZE; i++)
             {
                 // 分CL加密并写入
+                uint8_t buf[64] = {0}; // 64字节的缓存行
+                auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
+                assert(entry != NULL);
+                Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
+                Addr hpageAddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
+                uint64_t ofset = (paddr - hpageAddr) / CL_SIZE;
+                CME::sDM_Encrypt(buf, cl, sizeof(cl), hpageAddr + ofset * CL_SIZE, ckey);
+                write2Mem(CL_SIZE, buf, paddr);
+                addr += CL_SIZE;
             }
+
+            addr = vaddr;
             // 加密数据
 
             // 计算HMAC
+            sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM;
 
+            assert(r_hmac_phy_list.size() > 0);
+            int hmacpageindx = 0; // 存hmac的物理页面列表的索引
+            auto block = r_hmac_phy_list[hmacpageindx++];
+            Addr hmacpageAddrstart = block.start;                          // 存放hmac的起始物理地址(远端)
+            Addr hmacpageAddrend = block.start + PAGE_SIZE * block.npages; // 该数据对对应的结束地址
+            for (int i = 0; i < byte_size / (PAGE_SIZE >> 1); i++)
+            {
+                Addr hpageAddr = (addr & PAGE_ALIGN_MASK) + (addr & (PAGE_SIZE >> 1)); // 加密使用的缓存行地址
+                uint8_t dataptr[64];                                                   // 用虚拟地址
+                auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
+                assert(entry != NULL);
+                Addr paddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
+                read4Mem(PAGE_SIZE >> 1, dataptr, paddr); // 被加密的数据
+                iit_NodePtr counter = new iit_Node();     // new 会将结构体内部置0
+                uint8_t hmac[SM3_SIZE];
+                CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, hpageAddr, (uint8_t *)counter,
+                              sizeof(iit_Node), hmac, SM3_SIZE); // 计算hash值，存入hmac
+                if (hmacpageAddrstart < hmacpageAddrend)
+                {
+                    write2Mem(SM3_SIZE, hmac, hmacpageAddrstart);
+                    hmacpageAddrstart += SM3_SIZE;
+                }
+                else
+                { // 页面耗尽了,重新计算下一个页的起始和结束地址
+                    assert(hmacpageindx < r_hmac_phy_list.size());
+                    auto block = r_hmac_phy_list[hmacpageindx++];
+                    hmacpageAddrstart = block.start;
+                    hmacpageAddrend = hmacpageAddrstart + block.npages * PAGE_SIZE;
+                    write2Mem(SM3_SIZE, hmac, hmacpageAddrstart);
+                    hmacpageAddrstart += SM3_SIZE;
+                }
+            }
             // 构建iit
 
+            uint64_t leaf_num = byte_size / (IIT_LEAF_ARITY * CL_SIZE);
+            uint64_t iitpPageindex = 0;
+            block = r_iit_phy_list[iitpPageindex++];
+            Addr curpPageAddrstart = block.start;
+            Addr curpPageAddrend = curpPageAddrstart + block.npages * PAGE_SIZE;
+            bool leaf = true; // 是否是叶节点
+            while (leaf_num > 1)
+            {
+                uint64_t curlayernodenum = leaf_num;   //当前层结点
+                int i = 0; // 计算缓存行索引
+                Addr hpageAddr =
+                    (curpPageAddrstart & PAGE_ALIGN_MASK) + (curpPageAddrend & (PAGE_SIZE >> 1)); // 所在半页地址
+                while (curlayernodenum > 0)
+                {
+                    i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
+                    _iit_Node node;
+                    // 算hash_tag
+                    CL_Counter *counter;
+                    uint8_t hmac[8];
+                    memset((uint8_t *)counter, 0, sizeof(CL_Counter));
+                    if (leaf)
+                    { // 叶节点
+
+                        CME::sDM_HMAC((uint8_t *)(&node.leafNode), sizeof(_iit_Node),
+                                      hkey, hpageAddr + i * CL_SIZE, (uint8_t *)counter, sizeof(CL_Counter), hmac, 8);
+                        // hpageAddr + i* CL_SIZE 是所在缓存行的首地址
+                    }
+                    else
+                    { // 中间节点
+                        CME::sDM_HMAC((uint8_t *)(&node.midNode), sizeof(_iit_Node),
+                                      hkey, hpageAddr + i * CL_SIZE, (uint8_t *)counter, sizeof(CL_Counter), hmac, 8);
+                    }
+                    iit_hash_tag hash_tag;
+                    memcpy((uint8_t *)&hash_tag, hmac, sizeof(iit_hash_tag));           // 把计算完的hash_tag放入
+                    node.embed_hash_tag(leaf ? IIT_LEAF_TYPE : IIT_MID_TYPE, hash_tag); // hash_tag嵌入到叶节点还是中间结点
+                    write2Mem(sizeof(_iit_Node), (uint8_t *)(&node), curpPageAddrstart);
+                    // 写入物理地址
+                    curpPageAddrstart += sizeof(_iit_Node);
+                    if (curpPageAddrstart >= curpPageAddrend)
+                    { // 页面可用空间耗尽
+                        auto block = r_iit_phy_list[iitpPageindex++];
+                        curpPageAddrstart = block.start;
+                        curpPageAddrend = block.npages * PAGE_SIZE + curpPageAddrstart;
+                    }
+                    curlayernodenum--; // 当前层写完了一个节点
+                }
+                leaf = false;
+                leaf_num /= IIT_MID_ARITY; // 下一层的结点数
+            }
             return;
         }
         /**
@@ -462,7 +565,7 @@ namespace gem5
             sp.key_get(CME_KEY_TYPE, tmp_ckey);
             sdm_hashKey tmp_hkey;
             sp.key_get(HASH_KEY_TYPE, tmp_hkey);
-            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey);
+            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey,r_hmac_phy_list,r_iit_phy_list);
             // 预估所需页面数量,同时填写跳数、每页可写数据对数量
             int hmac_per,
                 iit_per;
@@ -681,7 +784,9 @@ namespace gem5
                     CME::sDM_Encrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
                                      hPageAddr + i * CL_SIZE, cme_key);
                     // 将重新加密好的cacheLine写回到内存
-                    write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, hPageAddr + i * CL_SIZE);
+                    const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(pktAddr&PAGE_ALIGN_MASK);
+                    assert(entry != NULL);
+                    write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, entry->paddr + i * CL_SIZE);
                 }
             }
             else
@@ -690,7 +795,9 @@ namespace gem5
                 CME::sDM_Encrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter),
                                  hPageAddr + off * CL_SIZE, cme_key);
                 // 将重新加密好的cacheLine写回到内存
-                write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, hPageAddr + off * CL_SIZE);
+                auto entry = process->pTable->lookup(pktAddr&PAGE_ALIGN_MASK);
+                assert(entry != NULL);
+                write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, entry->paddr + off * CL_SIZE);
                 // 保持hpg_data的最新性,加密性,下面计算hmac会使用该数组
                 memcpy(hpg_data + off * CL_SIZE, pkt->getPtr<uint8_t>(), CL_SIZE);
             }
