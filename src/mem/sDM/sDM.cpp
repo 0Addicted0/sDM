@@ -49,9 +49,9 @@ namespace gem5
          * instance = sDMmanager(params=params)
          * @attention 待传入参数
          */
-        sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
-                                                                 //  memPort(params.name + ".mem_side", this),
-                                                                 _requestorId(params.system->getRequestorId(this, "sDMmanager")),
+        sDMmanager::sDMmanager(const sDMmanagerParams &params) : SimObject(params),
+                                                                  memPort(params.name + ".mem_side", this),
+                                                                 _requestorId(params.system->getRequestorId(this)),
                                                                  remote_pool_id(params.remote_pool_id)
         {
             has_recv = 0;
@@ -74,22 +74,22 @@ namespace gem5
          */
         void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
         {
-            // RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
-            // PacketPtr pkt = Packet::createRead(req);
-            // pkt->dataDynamic(new uint8_t[byte_size]);
-            // // bool res = memPort.sendTimingReq(pkt);
-            // memPort.sendTimingReq(pkt);
-            // // if (res)
-            // // {
-            // //     std::cout << "Successfully send timing request. Tick = " <<
-            // //         curTick() << std::endl;
-            // // }
+            RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
+            PacketPtr pkt = Packet::createRead(req);
+            pkt->dataDynamic(new uint8_t[byte_size]);
+            // bool res = memPort.sendTimingReq(pkt);
+            memPort.sendTimingReq(pkt);
+            // if (res)
+            // {
+            //     std::cout << "Successfully send timing request. Tick = " <<
+            //         curTick() << std::endl;
+            // }
 
-            // // mem_ctrl发回响应packet时会自动调用recvTimingResp的函数，设置两个全局变量has_recv和pkt_recv
-            // // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
-            // while (!has_recv)
-            //     memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
-            // has_recv = false;
+            // mem_ctrl发回响应packet时会自动调用recvTimingResp的函数，设置两个全局变量has_recv和pkt_recv
+            // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
+            while (!has_recv)
+                memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
+            has_recv = false;
             return;
         }
         /**
@@ -103,10 +103,10 @@ namespace gem5
          */
         void sDMmanager::write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
         {
-            // RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
-            // PacketPtr pkt = Packet::createWrite(req);
-            // pkt->setData((const uint8_t *)data);
-            // memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
+            RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
+            PacketPtr pkt = Packet::createWrite(req);
+            pkt->setData((const uint8_t *)data);
+            memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
             return;
         }
         /**

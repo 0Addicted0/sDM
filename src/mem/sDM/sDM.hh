@@ -25,7 +25,7 @@
 #include "../../sim/mem_pool.hh"
 #include "../packet.hh"
 #include "../port.hh"
-#include "../../sim/clocked_object.hh"
+#include "../../sim/sim_object.hh"
 
 #include <map>
 #include <cassert>
@@ -244,40 +244,40 @@ namespace gem5
         /**
          * sDMmanager管理所有sdm相关操作，是sdm的硬件抽象
          */
-        class sDMmanager : public ClockedObject
+        class sDMmanager : public SimObject
         {
         public:
-            // class sDMPort : public RequestPort
-            // {
-            // public:
-            //     sDMPort(const std::string &name, sDMmanager *owner) : RequestPort(name, owner),
-            //                                                           sdmmanager(owner)
-            //     {
-            //     }
-            //     // sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager),
-            //     //                                                              sdmmanager(_sdmmanager)
-            //     // {
-            //     //     printf("sDMPort init\n");
-            //     // }
+            class sDMPort : public RequestPort
+            {
+            public:
+                // sDMPort(const std::string &name, sDMmanager *owner) : RequestPort(name, owner),
+                //                                                       sdmmanager(owner)
+                // {
+                // }
+                sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager),
+                                                                             sdmmanager(_sdmmanager)
+                {
+                    printf("!! sDMPort init!!\n");
+                }
 
-            // protected:
-            //     sDMmanager *sdmmanager;
+            protected:
+                sDMmanager *sdmmanager;
 
-            //     bool recvTimingResp(PacketPtr pkt)
-            //     {
-            //         sdmmanager->pkt_recv = pkt;
-            //         sdmmanager->has_recv = 1;
-            //         return true;
-            //     }
-            //     void recvReqRetry()
-            //     {
-            //         panic("%s does not expect a retry\n", name());
-            //     }
-            // };
+                bool recvTimingResp(PacketPtr pkt)
+                {
+                    sdmmanager->pkt_recv = pkt;
+                    sdmmanager->has_recv = 1;
+                    return true;
+                }
+                void recvReqRetry()
+                {
+                    panic("%s does not expect a retry\n", name());
+                }
+            };
 
             bool has_recv = 0;
             PacketPtr pkt_recv = nullptr;
-            // sDMPort memPort;
+            sDMPort memPort;
             RequestorID requestorId() { return _requestorId; }
 
             // private:
@@ -316,13 +316,13 @@ namespace gem5
             void write(PacketPtr pkt);
             void read(PacketPtr pkt);
 
-            // Port &
-            // getPort(const std::string &if_name, PortID idx = InvalidPortID) override
-            // {
-            //     if (if_name == "mem_side")
-            //         return memPort;
-            //     return sDMmanager::getPort(if_name, idx);
-            // }
+            Port &
+            getPort(const std::string &if_name, PortID idx = InvalidPortID) override
+            {
+                if (if_name == "mem_side")
+                    return memPort;
+                return sDMmanager::getPort(if_name, idx);
+            }
         };
     }
 }

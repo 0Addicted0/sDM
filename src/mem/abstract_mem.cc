@@ -450,11 +450,11 @@ AbstractMemory::access(PacketPtr pkt)
             // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
             // printf(" read[%lx]\n",pkt->req->getVaddr());
             pkt->setData(host_addr);
-            if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
-            {
-                printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
-                printf(" read[%lx]\n", pkt->req->getVaddr());
-            }
+            // if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
+            // {
+            //     printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
+            //     printf(" read[%lx]\n", pkt->req->getVaddr());
+            // }
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -474,11 +474,11 @@ AbstractMemory::access(PacketPtr pkt)
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
                 // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
                 // printf(" write[%lx]\n",pkt->req->getVaddr());
-                if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
-                {
-                    printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
-                    printf(" read[%lx]\n", pkt->req->getVaddr());
-                }
+                // if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
+                // {
+                //     printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
+                //     printf(" read[%lx]\n", pkt->req->getVaddr());
+                // }
                 pkt->writeData(host_addr);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());

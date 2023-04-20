@@ -173,11 +173,12 @@ namespace gem5
 
         // 实例化sDMmanager
         sDMmanagerParams p;
-        // // 默认将可用池的第一个视作远端内存
+        // 默认将可用池的第一个视作远端内存
         // p.remote_pool_id = pool_ids[0];
-
+        p.name = "system.sDMmanager";
+        p.eventq_index = 0;
+        p.system = params.system;
         sDMmanager = new sDM::sDMmanager(p);
-
         // sDMmanager->local_pool_id = pool_ids[1];
         // sDMmanager->process = this;
         // sDMmanager->mem_pools = &(this->seWorkload->memPools);

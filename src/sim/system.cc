@@ -191,7 +191,7 @@ namespace gem5
                  name());
 
         //  yqy mark
-        // printf("system construceted!!\n");
+        printf("system[%s] construceted!!\n",name().c_str());
         workload->setSystem(this);
 
         // add self to global system list
@@ -494,7 +494,6 @@ namespace gem5
     RequestorID
     System::getRequestorId(const SimObject *requestor, std::string subrequestor)
     {
-        printf("%s\n", subrequestor.c_str());
         auto requestor_name = leafRequestorName(requestor, subrequestor);
         return _getRequestorId(requestor, requestor_name);
     }
@@ -503,10 +502,6 @@ namespace gem5
     System::_getRequestorId(const SimObject *requestor, const std::string &requestor_name)
     {
         std::string name = stripSystemName(requestor_name);
-        if (strstr(requestor_name.c_str(), "sDMmanager"))
-        {
-            printf("sDMmanager is requesting id\n");
-        }
         // CPUs in switch_cpus ask for ids again after switching
         for (int i = 0; i < requestors.size(); i++)
         {
@@ -533,7 +528,10 @@ namespace gem5
         requestors.emplace_back(requestor, name, requestor_id);
 
         // yqy mark
-        printf("[%ld]system.cc Requestor %s has id %d\n", curTick(), requestor_name.c_str(), requestors.back().id);
+        if (strstr(requestor_name.c_str(), "sDMmanager"))
+        {
+            printf("[%ld]system.cc %s has id %d\n", curTick(), name.c_str(), requestors.back().id);
+        }
 
         return requestors.back().id;
     }
