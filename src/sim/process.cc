@@ -179,9 +179,10 @@ namespace gem5
         p.eventq_index = 0;
         p.system = params.system;
         sDMmanager = new sDM::sDMmanager(p);
-        // sDMmanager->local_pool_id = pool_ids[1];
-        // sDMmanager->process = this;
-        // sDMmanager->mem_pools = &(this->seWorkload->memPools);
+        // 默认将可用池的第二个视作本地内存
+        sDMmanager->local_pool_id = pool_ids[1];
+        sDMmanager->process = this;
+        sDMmanager->mem_pools = &(this->seWorkload->memPools);
 
         printf("sDMmanager->mem_pools: %p\n", sDMmanager->mem_pools);
     }

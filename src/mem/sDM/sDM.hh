@@ -26,6 +26,7 @@
 #include "../packet.hh"
 #include "../port.hh"
 #include "../../sim/sim_object.hh"
+#include "../../sim/process.hh"
 
 #include <map>
 #include <cassert>
@@ -278,6 +279,10 @@ namespace gem5
             bool has_recv = 0;
             PacketPtr pkt_recv = nullptr;
             sDMPort memPort;
+            /**
+             * @author psj
+             * @brief 返回当前sDMmanager的_requestorId
+            */
             RequestorID requestorId() { return _requestorId; }
 
             // private:
@@ -286,12 +291,11 @@ namespace gem5
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
             RequestorID _requestorId;
-
-            sdmIDtype sdm_space_cnt;          // 全局单增,2^64永远不会耗尽, start from 1
-            int remote_pool_id;               // 可用本地内存池(内存段)编号
-            int local_pool_id;                // 记录每个process/workload的本地pool的编号
-            MemPools *mem_pools;              // 实例化时的内存池指针
-            Process *process;                 // 是为了使用pTable而引入与实际情况是不相符的
+            Process *process;        // 是为了使用pTable而引入与实际情况是不相符的
+            sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
+            int remote_pool_id;      // 可用本地内存池(内存段)编号
+            int local_pool_id;       // 记录每个process/workload的本地pool的编号
+            MemPools *mem_pools;     // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
@@ -303,18 +307,18 @@ namespace gem5
             bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
-            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey);
+            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list);
 
             sDMmanager(const sDMmanagerParams &p);
 
-            sdmIDtype isContained(Addr paddr);
+            sdmIDtype isContained(Addr vaddr);
             bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
-            bool verify(Addr paddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
+            bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h, 
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
             void write(PacketPtr pkt);
-            void read(PacketPtr pkt);
+            void read(PacketPtr pkt, uint8_t * pkt_data_ptr, Addr vaddr);
 
             Port &
             getPort(const std::string &if_name, PortID idx = InvalidPortID) override

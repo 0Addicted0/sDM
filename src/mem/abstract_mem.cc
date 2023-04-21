@@ -274,7 +274,6 @@ AbstractMemory::trackLoadLocked(PacketPtr pkt)
             return;
         }
     }
-
     // no record for this xc: need to allocate a new one
     DPRINTF(LLSC, "Adding lock record: context %d addr %#x\n",
             req->contextId(), paddr);
@@ -395,7 +394,9 @@ AbstractMemory::access(PacketPtr pkt)
     assert(pkt->getAddrRange().isSubset(range));
 
     uint8_t *host_addr = toHostAddr(pkt->getAddr());
-
+    // yqy mark用于解决pkt读写地址不是CL对齐的
+    uint64_t offset = pkt->getAddr() % CL_SIZE;
+    uint8_t dataCpoy[CL_SIZE] = {0};
     if (pkt->cmd == MemCmd::SwapReq) {
         if (pkt->isAtomicOp()) {
             if (pmemAddr) {
@@ -447,10 +448,19 @@ AbstractMemory::access(PacketPtr pkt)
         if (pmemAddr) {
             // yqy mark
             // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
+            if(pkt->req->hasVaddr() && pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+            {
+                memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
+                // system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+                pkt->setData(dataCpoy + offset); 
+            }
+            else // 无须检查该packet
+            {
+                pkt->setData(host_addr);
+            }
+            // yqy test
             // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
             // printf(" read[%lx]\n",pkt->req->getVaddr());
-            pkt->setData(host_addr);
-
             // if (!pkt->req->hasVaddr())
             // {
             //     printf("[%ld]abstract_mem access %lx[%ld] (READ)\n", curTick(), pkt->getAddr(), pkt->getSize());
@@ -482,6 +492,18 @@ AbstractMemory::access(PacketPtr pkt)
             if (pmemAddr) {
                 // yqy mark
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
+                if(pkt->req->hasVaddr() && pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+                {
+                    // sDM::write(pkt);
+                    // system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt);
+
+                    pkt->writeData(host_addr);// 开启调试sDMmanager->write(pkt)时请注释此行
+                }
+                else // 无须检查该packet
+                {
+                    pkt->writeData(host_addr);
+                }
+                // yqy test
                 // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
                 // printf(" write[%lx]\n",pkt->req->getVaddr());
                 // if (!pkt->req->hasVaddr())
@@ -497,7 +519,6 @@ AbstractMemory::access(PacketPtr pkt)
                 //     printf("[%ld]abstract_mem access %s(WRITE)", curTick(), pkt->print().c_str());
                 //     // printf(" write[%lx]\n", pkt->req->getVaddr());
                 // }
-                pkt->writeData(host_addr);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }
@@ -526,6 +547,7 @@ AbstractMemory::functionalAccess(PacketPtr pkt)
     if (pkt->isRead()) {
         if (pmemAddr) {
             pkt->setData(host_addr);
+            // yqy test
             // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
             // {
             //     printf("[%ld]funcitonal %s(READ) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
@@ -537,6 +559,7 @@ AbstractMemory::functionalAccess(PacketPtr pkt)
     } else if (pkt->isWrite()) {
         if (pmemAddr) {
             pkt->writeData(host_addr);
+            // yqy test
             // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
             // {
             //     printf("[%ld]funcitonal %s(WRITE) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
