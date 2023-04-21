@@ -7,5 +7,5 @@ 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
 
 git reset --soft HEAD^
 
-git remote set-url origin xxxURL
+git remote set-url origin https://github.com/0Addicted0/sDM.git
 git checkout -b xxx-your-branch

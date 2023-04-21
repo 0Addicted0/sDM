@@ -450,11 +450,21 @@ AbstractMemory::access(PacketPtr pkt)
             // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
             // printf(" read[%lx]\n",pkt->req->getVaddr());
             pkt->setData(host_addr);
-            // if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
+
+            // if (!pkt->req->hasVaddr())
             // {
-            //     printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
-            //     printf(" read[%lx]\n", pkt->req->getVaddr());
+            //     printf("[%ld]abstract_mem access %lx[%ld] (READ)\n", curTick(), pkt->getAddr(), pkt->getSize());
             // }
+            // if(pkt->getAddr()==0x1e73a2)
+            // {
+            //     printf("read[0x1e73a2]%ld\n",pkt->getSize());
+            // }
+            // if (!pkt->req->hasVaddr() && (pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
+            // {
+            //     printf("[%ld]abstract_mem access %s(READ)", curTick(), pkt->print().c_str());
+            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
+            // }
+
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -474,10 +484,18 @@ AbstractMemory::access(PacketPtr pkt)
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
                 // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
                 // printf(" write[%lx]\n",pkt->req->getVaddr());
-                // if (pkt->req->hasVaddr()) // 该请求一定不来自程序本身
+                // if (!pkt->req->hasVaddr())
                 // {
-                //     printf("[%ld]abstract_mem access %s", curTick(), pkt->print().c_str());
-                //     printf(" read[%lx]\n", pkt->req->getVaddr());
+                //     printf("[%ld]abstract_mem access %lx[%ld] (WRITE)\n", curTick(), pkt->getAddr(),pkt->getSize());
+                // }
+                // if(pkt->getAddr()==0x1e73a2)
+                // {
+                //     printf("write[0x1e73a2]%ld\n",pkt->getSize());
+                // }
+                // if (!pkt->req->hasVaddr() && (pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
+                // {
+                //     printf("[%ld]abstract_mem access %s(WRITE)", curTick(), pkt->print().c_str());
+                //     // printf(" write[%lx]\n", pkt->req->getVaddr());
                 // }
                 pkt->writeData(host_addr);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
@@ -508,12 +526,22 @@ AbstractMemory::functionalAccess(PacketPtr pkt)
     if (pkt->isRead()) {
         if (pmemAddr) {
             pkt->setData(host_addr);
+            // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
+            // {
+            //     printf("[%ld]funcitonal %s(READ) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
+            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
+            // }
         }
         TRACE_PACKET("Read");
         pkt->makeResponse();
     } else if (pkt->isWrite()) {
         if (pmemAddr) {
             pkt->writeData(host_addr);
+            // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
+            // {
+            //     printf("[%ld]funcitonal %s(WRITE) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
+            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
+            // }
         }
         TRACE_PACKET("Write");
         pkt->makeResponse();
