@@ -252,11 +252,11 @@ namespace gem5
              * @author yqy
              * @param iit_node_type 此节点类型
              * @param hash_tag_key  此节点所属sdm的hash_tag密钥
-             * @param paddr         此节点的物理地址
+             * @param vaddr         此节点的虚拟地址
              * @return 返回计算得到的hash值
              */
             iit_hash_tag
-            get_hash_tag(int iit_node_type, uint8_t *hash_tag_key, Addr paddr)
+            get_hash_tag(int iit_node_type, uint8_t *hash_tag_key, Addr vaddr)
             {
                 node_type_sanity(iit_node_type);
                 _iit_Node node;
@@ -265,7 +265,7 @@ namespace gem5
                 memset(counter, 0, sizeof(CL_Counter));
                 erase_hash_tag(iit_node_type, &node);
                 CME::sDM_HMAC((uint8_t *)(&node.leafNode), sizeof(_iit_Node), hash_tag_key,
-                              paddr, counter, sizeof(iit_hash_tag), (uint8_t *)(&hash_tag), sizeof(iit_hash_tag));
+                              vaddr, counter, sizeof(iit_hash_tag), (uint8_t *)(&hash_tag), sizeof(iit_hash_tag));
                 return hash_tag;
             }
 

@@ -98,6 +98,8 @@ class SEWorkload : public Workload
 
     Addr memSize(int pool_id=0) const;
     Addr freeMemSize(int pool_id=0) const;
+
+    MemPools *getmempools();
 };
 
 } // namespace gem5

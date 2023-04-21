@@ -46,11 +46,13 @@
 #ifndef __MEM_ABSTRACT_MEMORY_HH__
 #define __MEM_ABSTRACT_MEMORY_HH__
 
+#include "mem/sDM/sDM_def.hh"
 #include "mem/backdoor.hh"
 #include "mem/port.hh"
 #include "params/AbstractMemory.hh"
 #include "sim/clocked_object.hh"
 #include "sim/stats.hh"
+#include "sim/process.hh"
 
 namespace gem5
 {

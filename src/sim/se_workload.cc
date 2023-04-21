@@ -110,4 +110,11 @@ SEWorkload::freeMemSize(int pool_id) const
     return memPools.freeMemSize(pool_id);
 }
 
-} // namespace gem5
+MemPools *
+SEWorkload::getmempools()
+{
+    return &memPools;
+} 
+
+}
+// namespace gem5

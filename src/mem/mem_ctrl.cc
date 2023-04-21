@@ -198,6 +198,7 @@ MemCtrl::addToReadQueue(PacketPtr pkt,
 
     // yqy mark
     // printf("[%ld]mem_ctrl.cc addToReadQueue:%s\n",curTick(),pkt->print().c_str());
+    
     // if the request size is larger than burst size, the pkt is split into
     // multiple packets
     // Note if the pkt starting address is not aligened to burst size, the

@@ -45,28 +45,29 @@
 #include "sim/fd_entry.hh"
 #include "sim/mem_state.hh"
 #include "sim/sim_object.hh"
+#include "mem/sDM/sDM.hh"
 
 namespace gem5
 {
 
-GEM5_DEPRECATED_NAMESPACE(Loader, loader);
-namespace loader
-{
-class ObjectFile;
-} // namespace loader
+  GEM5_DEPRECATED_NAMESPACE(Loader, loader);
+  namespace loader
+  {
+    class ObjectFile;
+  } // namespace loader
 
-struct ProcessParams;
+  struct ProcessParams;
 
-class EmulatedDriver;
-class EmulationPageTable;
-class SEWorkload;
-class SyscallDesc;
-class SyscallReturn;
-class System;
-class ThreadContext;
+  class EmulatedDriver;
+  class EmulationPageTable;
+  class SEWorkload;
+  class SyscallDesc;
+  class SyscallReturn;
+  class System;
+  class ThreadContext;
 
-class Process : public SimObject
-{
+  class Process : public SimObject
+  {
   public:
     Process(const ProcessParams &params, EmulationPageTable *pTable,
             loader::ObjectFile *obj_file);
@@ -119,7 +120,7 @@ class Process : public SimObject
     // align to page boundaries, it will be expanded in either direction until
     // it does. This function will therefore set up *at least* the range
     // requested, and may configure more if necessary.
-    void allocateMem(Addr vaddr, int64_t size, bool clobber=false);
+    void allocateMem(Addr vaddr, int64_t size, bool clobber = false);
 
     /// Attempt to fix up a fault at vaddr by allocating a page on the stack.
     /// @return Whether the fault has been fixed.
@@ -130,7 +131,7 @@ class Process : public SimObject
     void
     assignThreadContext(ContextID context_id)
     {
-        contextIds.push_back(context_id);
+      contextIds.push_back(context_id);
     }
 
     /**
@@ -195,25 +196,25 @@ class Process : public SimObject
      */
     class Loader
     {
-      public:
-        Loader();
+    public:
+      Loader();
 
-        /* Loader instances are singletons. */
-        Loader(const Loader &) = delete;
-        void operator=(const Loader &) = delete;
+      /* Loader instances are singletons. */
+      Loader(const Loader &) = delete;
+      void operator=(const Loader &) = delete;
 
-        virtual ~Loader() {}
+      virtual ~Loader() {}
 
-        /**
-         * Each subclass needs to implement this method. If the loader is
-         * compatible with the passed in object file, it should return the
-         * created Process object corresponding to it. If not, it should fail
-         * silently and return nullptr. If there's a non-compatibliity related
-         * error like file IO errors, etc., those should fail non-silently
-         * with a panic or fail as normal.
-         */
-        virtual Process *load(const ProcessParams &params,
-                              loader::ObjectFile *obj_file) = 0;
+      /**
+       * Each subclass needs to implement this method. If the loader is
+       * compatible with the passed in object file, it should return the
+       * created Process object corresponding to it. If not, it should fail
+       * silently and return nullptr. If there's a non-compatibliity related
+       * error like file IO errors, etc., those should fail non-silently
+       * with a panic or fail as normal.
+       */
+      virtual Process *load(const ProcessParams &params,
+                            loader::ObjectFile *obj_file) = 0;
     };
 
     // Try all the Loader instance's "load" methods one by one until one is
@@ -306,7 +307,10 @@ class Process : public SimObject
 
     // Track how many system calls are executed
     statistics::Scalar numSyscalls;
-};
+
+    // sDM class
+    sDM::sDMmanager *sDMmanager;
+  };
 
 } // namespace gem5
 

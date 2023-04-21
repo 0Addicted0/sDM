@@ -155,12 +155,27 @@ Process::Process(const ProcessParams &params, EmulationPageTable *pTable,
      */
     _tgid = params.pid;
 
-//  yqy mark
-    printf("%s construct!!\n",progName());
+    //  yqy mark
+    printf("%s construct!!\n", progName());
     printf("process.cc pool: ");
-    for(int pool_id: pool_ids)
-        printf("%d ",pool_id);
+    for(int pool_id : pool_ids)
+        printf("%d ", pool_id);
     printf("\n");
+
+    // 实例化sDMmanager
+    sDMmanagerParams p;
+    // 默认将可用池的第一个视作远端内存
+    // p.remote_pool_id = pool_ids[0];
+    p.name = "system.sDMmanager";
+    p.eventq_index = 0;
+    p.system = params.system;
+    sDMmanager = new sDM::sDMmanager(p);
+    // 默认将可用池的第二个视作本地内存
+    sDMmanager->local_pool_id = pool_ids[1];
+    sDMmanager->process = this;
+    sDMmanager->mem_pools = (this->seWorkload->getmempools());
+
+    printf("sDMmanager->mem_pools: %p\n", sDMmanager->mem_pools);
 
     exitGroup = new bool();
     sigchld = new bool();
