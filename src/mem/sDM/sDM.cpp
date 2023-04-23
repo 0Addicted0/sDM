@@ -68,6 +68,18 @@ namespace gem5
         // sDMmanager::~sDMmanager() {}
         /**
          * @author psj
+         * @brief sendtimingreq失败后重发
+        */
+        void 
+        sDMmanager::doRetry()
+        {
+            if (memPort.sendTimingReq(pkt_retry)) 
+            {
+                pkt_retry = NULL;
+            }
+        }
+        /**
+         * @author psj
          * @brief 收到响应packet后记录pkt并向发送方通知已接收响应包
          * @return 返回是否成功收到响应packet
          * @attention 未验证*
@@ -78,7 +90,10 @@ namespace gem5
             PacketPtr pkt = Packet::createRead(req);
             pkt->dataDynamic(new uint8_t[byte_size]);
             // bool res = memPort.sendTimingReq(pkt);
-            memPort.sendTimingReq(pkt);
+            if(!memPort.sendTimingReq(pkt))
+            {
+                pkt_retry=pkt;
+            }
             // if (res)
             // {
             //     std::cout << "Successfully send timing request. Tick = " <<
@@ -88,7 +103,10 @@ namespace gem5
             // mem_ctrl发回响应packet时会自动调用recvTimingResp的函数，设置两个全局变量has_recv和pkt_recv
             // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
             while (!has_recv)
-                memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
+            {
+
+            }
+            memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
             has_recv = false;
             return;
         }
@@ -106,7 +124,10 @@ namespace gem5
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createWrite(req);
             pkt->setData((const uint8_t *)data);
-            memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
+            if(!memPort.sendTimingReq(pkt))  //  packet mem[i]->gem5MemPtr->[i];...
+            {
+                pkt_retry=pkt;
+            }  
             return;
         }
         /**

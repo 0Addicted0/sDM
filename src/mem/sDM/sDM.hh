@@ -248,6 +248,8 @@ namespace gem5
         class sDMmanager : public SimObject
         {
         public:
+            void doRetry();
+            
             class sDMPort : public RequestPort
             {
             public:
@@ -272,12 +274,14 @@ namespace gem5
                 }
                 void recvReqRetry()
                 {
-                    panic("%s does not expect a retry\n", name());
+                    sdmmanager->doRetry();
+                    //panic("%s does not expect a retry\n", name());
                 }
             };
 
             bool has_recv = 0;
             PacketPtr pkt_recv = nullptr;
+            PacketPtr pkt_retry = nullptr;
             sDMPort memPort;
             /**
              * @author psj
