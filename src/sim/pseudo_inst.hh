@@ -55,69 +55,70 @@
 namespace gem5
 {
 
-GEM5_DEPRECATED_NAMESPACE(PseudoInst, pseudo_inst);
-namespace pseudo_inst
-{
+  GEM5_DEPRECATED_NAMESPACE(PseudoInst, pseudo_inst);
+  namespace pseudo_inst
+  {
 
-static inline void
-decodeAddrOffset(Addr offset, uint8_t &func)
-{
-    func = bits(offset, 15, 8);
-}
+    static inline void
+    decodeAddrOffset(Addr offset, uint8_t &func)
+    {
+      func = bits(offset, 15, 8);
+    }
 
-void arm(ThreadContext *tc);
-void quiesce(ThreadContext *tc);
-void quiesceSkip(ThreadContext *tc);
-void quiesceNs(ThreadContext *tc, uint64_t ns);
-void quiesceCycles(ThreadContext *tc, uint64_t cycles);
-uint64_t quiesceTime(ThreadContext *tc);
-uint64_t readfile(ThreadContext *tc, Addr vaddr, uint64_t len,
-    uint64_t offset);
-uint64_t writefile(ThreadContext *tc, Addr vaddr, uint64_t len,
-    uint64_t offset, Addr filenameAddr);
-void loadsymbol(ThreadContext *xc);
-void addsymbol(ThreadContext *tc, Addr addr, Addr symbolAddr);
-uint64_t initParam(ThreadContext *xc, uint64_t key_str1, uint64_t key_str2);
-uint64_t rpns(ThreadContext *tc);
-void wakeCPU(ThreadContext *tc, uint64_t cpuid);
-void m5exit(ThreadContext *tc, Tick delay);
-void m5fail(ThreadContext *tc, Tick delay, uint64_t code);
-uint64_t m5sum(ThreadContext *tc, uint64_t a, uint64_t b, uint64_t c,
-                                  uint64_t d, uint64_t e, uint64_t f);
-void resetstats(ThreadContext *tc, Tick delay, Tick period);
-void dumpstats(ThreadContext *tc, Tick delay, Tick period);
-void dumpresetstats(ThreadContext *tc, Tick delay, Tick period);
-void m5checkpoint(ThreadContext *tc, Tick delay, Tick period);
-void debugbreak(ThreadContext *tc);
-void switchcpu(ThreadContext *tc);
-void workbegin(ThreadContext *tc, uint64_t workid, uint64_t threadid);
-void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
-void m5Syscall(ThreadContext *tc);
-void togglesync(ThreadContext *tc);
-void triggerWorkloadEvent(ThreadContext *tc);
-bool sdm_poster(ThreadContext *tc,uint64_t vaddr,size_t size);
-/**
- * Execute a decoded M5 pseudo instruction
- *
- * The ISA-specific code is responsible to decode the pseudo inst
- * function number and subfunction number. After that has been done,
- * the rest of the instruction can be implemented in an ISA-agnostic
- * manner using the ISA-specific getArguments functions.
- *
- * @param func M5 pseudo op major function number (see utility/m5/m5ops.h)
- * @param result A reference to a uint64_t to store a result in.
- * @return Whether the pseudo instruction was recognized/handled.
- */
+    void arm(ThreadContext *tc);
+    void quiesce(ThreadContext *tc);
+    void quiesceSkip(ThreadContext *tc);
+    void quiesceNs(ThreadContext *tc, uint64_t ns);
+    void quiesceCycles(ThreadContext *tc, uint64_t cycles);
+    uint64_t quiesceTime(ThreadContext *tc);
+    uint64_t readfile(ThreadContext *tc, Addr vaddr, uint64_t len,
+                      uint64_t offset);
+    uint64_t writefile(ThreadContext *tc, Addr vaddr, uint64_t len,
+                       uint64_t offset, Addr filenameAddr);
+    void loadsymbol(ThreadContext *xc);
+    void addsymbol(ThreadContext *tc, Addr addr, Addr symbolAddr);
+    uint64_t initParam(ThreadContext *xc, uint64_t key_str1, uint64_t key_str2);
+    uint64_t rpns(ThreadContext *tc);
+    void wakeCPU(ThreadContext *tc, uint64_t cpuid);
+    void m5exit(ThreadContext *tc, Tick delay);
+    void m5fail(ThreadContext *tc, Tick delay, uint64_t code);
+    uint64_t m5sum(ThreadContext *tc, uint64_t a, uint64_t b, uint64_t c,
+                   uint64_t d, uint64_t e, uint64_t f);
+    void resetstats(ThreadContext *tc, Tick delay, Tick period);
+    void dumpstats(ThreadContext *tc, Tick delay, Tick period);
+    void dumpresetstats(ThreadContext *tc, Tick delay, Tick period);
+    void m5checkpoint(ThreadContext *tc, Tick delay, Tick period);
+    void debugbreak(ThreadContext *tc);
+    void switchcpu(ThreadContext *tc);
+    void workbegin(ThreadContext *tc, uint64_t workid, uint64_t threadid);
+    void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
+    void m5Syscall(ThreadContext *tc);
+    void togglesync(ThreadContext *tc);
+    void triggerWorkloadEvent(ThreadContext *tc);
+    bool sdm_poster(ThreadContext *tc, uint64_t vaddr, size_t size);
+    /**
+     * Execute a decoded M5 pseudo instruction
+     *
+     * The ISA-specific code is responsible to decode the pseudo inst
+     * function number and subfunction number. After that has been done,
+     * the rest of the instruction can be implemented in an ISA-agnostic
+     * manner using the ISA-specific getArguments functions.
+     *
+     * @param func M5 pseudo op major function number (see utility/m5/m5ops.h)
+     * @param result A reference to a uint64_t to store a result in.
+     * @return Whether the pseudo instruction was recognized/handled.
+     */
 
-template <typename ABI, bool store_ret>
-bool
-pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
-{
-    DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
+    template <typename ABI, bool store_ret>
+    bool
+    pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
+    {
+      DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
 
-    result = 0;
+      result = 0;
 
-    switch (func) {
+      switch (func)
+      {
       case M5OP_ARM:
         invokeSimcall<ABI>(tc, arm);
         return true;
@@ -215,7 +216,8 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         return true;
 
       case M5OP_RESERVED1:
-        invokeSimcall<ABI>(tc, sdm_poster);
+        result = invokeSimcall<ABI, store_ret>(tc, sdm_poster);
+        return true;
       case M5OP_RESERVED2:
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:
@@ -235,25 +237,25 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       default:
         warn("Unhandled m5 op: %#x\n", func);
         return false;
+      }
     }
-}
 
-template <typename ABI, bool store_ret=false>
-bool
-pseudoInst(ThreadContext *tc, uint8_t func, uint64_t &result)
-{
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
-}
+    template <typename ABI, bool store_ret = false>
+    bool
+    pseudoInst(ThreadContext *tc, uint8_t func, uint64_t &result)
+    {
+      return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    }
 
-template <typename ABI, bool store_ret=true>
-bool
-pseudoInst(ThreadContext *tc, uint8_t func)
-{
-    uint64_t result;
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
-}
+    template <typename ABI, bool store_ret = true>
+    bool
+    pseudoInst(ThreadContext *tc, uint8_t func)
+    {
+      uint64_t result;
+      return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    }
 
-} // namespace pseudo_inst
+  } // namespace pseudo_inst
 } // namespace gem5
 
 #endif // __SIM_PSEUDO_INST_HH__

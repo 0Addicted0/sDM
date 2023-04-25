@@ -105,8 +105,12 @@ namespace gem5
         {
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createWrite(req);
+            // ys debug 设置flag
+            pkt->allocate();
             pkt->setData((const uint8_t *)data);
             memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
+            // ys debug
+            // printf("write2mem over \n");
             return;
         }
         /**
@@ -411,6 +415,7 @@ namespace gem5
 
             CL_Counter cl{0};
             Addr addr = vaddr;
+
             for (int i = 0; i < byte_size / CL_SIZE; i++)
             {
                 // 分CL加密并写入
@@ -538,14 +543,17 @@ namespace gem5
             // data_size *= PAGE_SIZE;
             // 检查申请的虚拟空间是否已经存在于其他space中
             auto aft = sdm_paddr2id.lower_bound((Addr)(vaddr + data_size));
-            if (aft != sdm_paddr2id.begin())
+            if (sdm_paddr2id.size() != 0) // 第一次不用检查，一定没有重复
             {
-                aft--;
-                assert((aft->first + (aft->second.first) * PAGE_SIZE <= vaddr) && "overlapped");
-            }
-            else
-            {
-                assert((aft->first >= vaddr + data_byte_size) && "overlapped");
+                if (aft != sdm_paddr2id.begin())
+                {
+                    aft--;
+                    assert((aft->first + (aft->second.first) * PAGE_SIZE <= vaddr) && "overlapped");
+                }
+                else
+                {
+                    assert((aft->first >= vaddr + data_byte_size) && "overlapped");
+                }
             }
             // 2. 计算IIT树大小
             uint32_t h = 0;
@@ -563,14 +571,15 @@ namespace gem5
             std::vector<phy_space_block> r_hmac_phy_list;
             std::vector<phy_space_block> r_iit_phy_list;
             // ys(debug):hmac空间大小可能没有按照页对齐，应向上取整
-            sdm_malloc((hmac_size / PAGE_SIZE) + (hmac_size & ((~PAGE_ALIGN_MASK) == 0 ? 0 : 1)), remote_pool_id, r_hmac_phy_list);
-            sdm_malloc((iit_size / PAGE_SIZE) + (hmac_size & ((~PAGE_ALIGN_MASK) == 0 ? 0 : 1)), remote_pool_id, r_iit_phy_list);
+            sdm_malloc(ceil(hmac_size, PAGE_SIZE), remote_pool_id, r_hmac_phy_list);
+            sdm_malloc(ceil(iit_size, PAGE_SIZE), remote_pool_id, r_iit_phy_list);
             // 初始化HMAC和iit区域(将数据区置0)
             sdm_CMEKey tmp_ckey;
             sp.key_get(CME_KEY_TYPE, tmp_ckey);
             sdm_hashKey tmp_hkey;
             sp.key_get(HASH_KEY_TYPE, tmp_hkey);
-            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list);
+            // sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list);
+            printf("skip init\n");
             // 预估所需页面数量,同时填写跳数、每页可写数据对数量
             int hmac_per,
                 iit_per;
@@ -581,12 +590,16 @@ namespace gem5
             std::vector<phy_space_block> l_iit_phy_list;
             sdm_malloc(hmac_lpage_num, local_pool_id, l_hmac_phy_list);
             sdm_malloc(iit_lpage_num, local_pool_id, l_iit_phy_list);
+            printf("l_hmac_phy_list size %d\n", l_hmac_phy_list.size());
+            printf("590 sdm_malloc over\n");
             // 构建两个链表
-            sp.HMACPtrPagePtr = (sdm_hmacPagePtrPagePtr)l_hmac_phy_list[0].start;
+            sp.HMACPtrPagePtr = (sdm_hmacPagePtrPagePtr)(l_hmac_phy_list[0].start);
             // 构建hmac skip-list
+            printf("596 start build_SkipList\n");
             build_SkipList(r_hmac_phy_list, l_hmac_phy_list, sp.hmac_skip, hmac_per, hmac_lpage_num);
             // 构建iit skip-list
             build_SkipList(r_iit_phy_list, l_iit_phy_list, sp.iit_skip, iit_per, iit_lpage_num);
+            printf("build_SkipList over\n");
             // 这里的sdm_table、sdm_paddr2id查询还没有接入gem5内存系统
             sdm_table.push_back(sp);
             // 加入到vaddr->id查询表
