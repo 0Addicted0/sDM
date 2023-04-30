@@ -134,7 +134,8 @@ namespace gem5
               params.input, params.output, params.errout)),
           childClearTID(0),
           ADD_STAT(numSyscalls, statistics::units::Count::get(),
-                   "Number of system calls")
+                   "Number of system calls"),
+          sDMmanager(params.sDMmanager)
     {
         fatal_if(!seWorkload, "Couldn't find appropriate workload object.");
         fatal_if(_pid >= System::maxPID, "_pid is too large: %d", _pid);
@@ -172,19 +173,21 @@ namespace gem5
         printf("\n");
 
         // 实例化sDMmanager
-        sDMmanagerParams p;
-        // 默认将可用池的第一个视作远端内存
-        // p.remote_pool_id = pool_ids[0];
-        p.name = "system.sDMmanager";
-        p.eventq_index = 0;
-        p.system = params.system;
-        sDMmanager = new sDM::sDMmanager(p);
-        // 默认将可用池的第二个视作本地内存
-        sDMmanager->local_pool_id = pool_ids[1];
-        sDMmanager->process = this;
-        sDMmanager->mem_pools = &(this->seWorkload->memPools);
+        // sDMmanagerParams p;
 
-        printf("sDMmanager->mem_pools: %p\n", sDMmanager->mem_pools);
+        // 保证portID唯一性 
+        // p.name = "system.sDMmanager" + std::string(progName());
+        // p.eventq_index = 0;
+        // p.system = params.system;
+        // 默认将可用池的第一个视作远端内存
+        // sDMmanager->remote_pool_id = pool_ids[0];
+        // 默认将可用池的第二个视作本地内存
+        // sDMmanager->local_pool_id = pool_ids[1];
+        // sDMmanager->process = this;
+        // sDMmanager->mem_pools = &(this->seWorkload->memPools);
+        sDMmanager->process = this;
+        printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
+        // system->proc.push_back(this);
     }
 
     void

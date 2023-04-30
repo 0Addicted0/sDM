@@ -10,7 +10,7 @@ void *sdmmalloc(size_t len){
     void *addr = (void *)((uint64_t)mallocret + PAGE_SIZE - ((uint64_t)mallocret & (~PAGE_ALIGN_MASK)));
     printf("addr %p\n", addr);//地址对齐,但是会导致可用空间比申请的空间大一点（最多）
     addrmap[addr] = mallocret;
-    for (int i = 0; i < len; i += 4*1024)
+    for (int i = 0; i < len; i += PAGE_SIZE)
     {
         ((char *)addr)[i] = 1;
     }

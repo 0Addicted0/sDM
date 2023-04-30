@@ -124,6 +124,14 @@ def get_processes(args):
         if len(errouts) > idx:
             process.errout = errouts[idx]
 
+        # by psj
+        sDMmanager = sDM.sDMmanager()
+        process.sDMmanager = sDMmanager
+        # sDMmanager.process = process
+        # sDMmanager.remote_pool_id = pool_ids_v[0]
+        # sDMmanager.local_pool_id = pool_ids_v[1]
+
+        sDMmanagers.append(sDMmanager)
         multiprocesses.append(process)
         idx += 1
 
@@ -144,6 +152,7 @@ if "--ruby" in sys.argv:
 args = parser.parse_args()
 
 multiprocesses = []
+sDMmanagers = []
 numThreads = 1
 
 if args.bench:
@@ -196,6 +205,7 @@ system = System(
     mem_ranges=[
         AddrRange(args.mem_size),
         AddrRange(0x10000000000, size=args.mem_size),  # Add a new test memory
+        AddrRange(0x20000000000, size=args.mem_size),  # Add a new test memory
     ],
     cache_line_size=args.cacheline_size,
 )
@@ -297,6 +307,9 @@ else:
     MemConfig.config_mem(args, system)
     config_filesystem(system, args)
 
+    for sDMmanager in sDMmanagers:
+        sDMmanager.memPort = system.membus.cpu_side_ports
+    
 system.workload = SEWorkload.init_compatible(mp0_path)
 
 if args.wait_gdb:

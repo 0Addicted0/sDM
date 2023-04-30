@@ -24,6 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from m5.objects.sDM import sDMmanager
 from m5.SimObject import *
 from m5.params import *
 from m5.proxy import *
@@ -69,6 +70,7 @@ class Process(SimObject):
     drivers = VectorParam.EmulatedDriver([], "Available emulated drivers")
     release = Param.String("5.1.0", "Linux kernel uname release")
 
+    sDMmanager = Param.sDMmanager("sDMmanager")
     @classmethod
     def export_methods(cls, code):
         code("bool map(Addr vaddr, Addr paddr, int sz, bool cacheable=true);")

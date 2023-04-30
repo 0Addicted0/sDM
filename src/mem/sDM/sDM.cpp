@@ -52,14 +52,18 @@ namespace gem5
         sDMmanager::sDMmanager(const sDMmanagerParams &params) : SimObject(params),
                                                                  memPort(params.name + ".mem_side", this),
                                                                  _requestorId(params.system->getRequestorId(this)),
+                                                                //  process(params.process),
+                                                                 local_pool_id(params.local_pool_id),
                                                                  remote_pool_id(params.remote_pool_id)
+
         {
             has_recv = 0;
             pkt_recv = NULL;
             // 请添加retry pkt
-            std::cout << "!!sDMmanager!!\n"
-                      << "requestorID"
-                      << " " << _requestorId << std::endl;
+            printf("sDM.cpp process=%p,sDMmanager=%p\n",process,this);
+            // std::cout << "!!sDMmanager!!\n"
+                    //   << "requestorID"
+                    //   << " " << _requestorId << std::endl;
         }
         /**
          * @brief
@@ -434,7 +438,7 @@ namespace gem5
             // 加密数据
 
             // 计算HMAC
-            sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM;
+            sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM;// debug(unused)? yqy
 
             assert(r_hmac_phy_list.size() > 0);
             int hmacpageindx = 0; // 存hmac的物理页面列表的索引
@@ -487,20 +491,20 @@ namespace gem5
                     i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
                     _iit_Node node;
                     // 算hash_tag
-                    CL_Counter *counter;
+                    CL_Counter counter;// debug(CL_counter)?
                     uint8_t hmac[8];
-                    memset((uint8_t *)counter, 0, sizeof(CL_Counter));
+                    memset(counter, 0, sizeof(CL_Counter));
                     if (leaf)
                     { // 叶节点
 
                         CME::sDM_HMAC((uint8_t *)(&node.leafNode), sizeof(_iit_Node),
-                                      hkey, hpageAddr + i * CL_SIZE, (uint8_t *)counter, sizeof(CL_Counter), hmac, 8);
+                                      hkey, hpageAddr + i * CL_SIZE, counter, sizeof(CL_Counter), hmac, 8);
                         // hpageAddr + i* CL_SIZE 是所在缓存行的首地址
                     }
                     else
                     { // 中间节点
                         CME::sDM_HMAC((uint8_t *)(&node.midNode), sizeof(_iit_Node),
-                                      hkey, hpageAddr + i * CL_SIZE, (uint8_t *)counter, sizeof(CL_Counter), hmac, 8);
+                                      hkey, hpageAddr + i * CL_SIZE, counter, sizeof(CL_Counter), hmac, 8);
                     }
                     iit_hash_tag hash_tag;
                     memcpy((uint8_t *)&hash_tag, hmac, sizeof(iit_hash_tag));           // 把计算完的hash_tag放入
@@ -590,7 +594,7 @@ namespace gem5
             std::vector<phy_space_block> l_iit_phy_list;
             sdm_malloc(hmac_lpage_num, local_pool_id, l_hmac_phy_list);
             sdm_malloc(iit_lpage_num, local_pool_id, l_iit_phy_list);
-            printf("l_hmac_phy_list size %d\n", l_hmac_phy_list.size());
+            printf("l_hmac_phy_list size %ld\n", l_hmac_phy_list.size());
             printf("590 sdm_malloc over\n");
             // 构建两个链表
             sp.HMACPtrPagePtr = (sdm_hmacPagePtrPagePtr)(l_hmac_phy_list[0].start);

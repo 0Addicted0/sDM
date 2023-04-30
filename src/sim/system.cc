@@ -528,10 +528,10 @@ namespace gem5
         requestors.emplace_back(requestor, name, requestor_id);
 
         // yqy mark
-        if (strstr(requestor_name.c_str(), "sDMmanager"))
-        {
-            printf("[%ld]system.cc %s has id %d\n", curTick(), name.c_str(), requestors.back().id);
-        }
+        // if (strstr(requestor_name.c_str(), "sDMmanager"))
+        // {
+        //     printf("[%ld]system.cc %s has id %d\n", curTick(), name.c_str(), requestors.back().id);
+        // }
 
         return requestors.back().id;
     }

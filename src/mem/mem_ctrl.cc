@@ -81,7 +81,8 @@ MemCtrl::MemCtrl(const MemCtrlParams &p) :
     stats(*this)
 {
     DPRINTF(MemCtrl, "Setting up controller\n");
-
+    // yqy mark
+    printf("!!MemCtrl constructed!!\n");
     readQueue.resize(p.qos_priorities);
     writeQueue.resize(p.qos_priorities);
 

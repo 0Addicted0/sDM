@@ -613,6 +613,9 @@ class System : public SimObject, public PCEventScope
     // to be redirected to the faux-filesystem (a duplicate filesystem
     // intended to replace certain files on the host filesystem).
     std::vector<RedirectPath*> redirectPaths;
+
+    // 用于在membus连接到所属的process的sDMmanager的port
+    // std::vector<Process *>proc;
 };
 
 void printSystems();

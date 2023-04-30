@@ -52,6 +52,8 @@
 #include "debug/CoherentXBar.hh"
 #include "sim/system.hh"
 
+// 用于记录下一个待绑定的sDMmanager的memPort
+// int sDMmanagerPortBindcnt = 0;
 namespace gem5
 {
 
@@ -68,6 +70,9 @@ CoherentXBar::CoherentXBar(const CoherentXBarParams &p)
       ADD_STAT(snoopFanout, statistics::units::Count::get(),
                "Request fanout histogram")
 {
+    // yqy makr
+    printf("!!membus constructed!!: memside=%d,default=%d,cpuside=%d\n",p.port_mem_side_ports_connection_count,p.port_default_connection_count,p.port_cpu_side_ports_connection_count);
+    
     // create the ports based on the size of the memory-side port and
     // CPU-side port vector ports, and the presence of the default port,
     // the ports are enumerated starting from zero
@@ -106,6 +111,8 @@ CoherentXBar::CoherentXBar(const CoherentXBarParams &p)
                                            csprintf("respLayer%d", i)));
         snoopRespPorts.push_back(new SnoopRespPort(*bp, *this));
     }
+    // cpuSidePorts[cpuSidePorts.size()-1]->bind(system->proc[sDMmanagerPortBindcnt++]->sDMmanager->memPort);
+    // printf("%s <--> %s\n",cpuSidePorts[cpuSidePorts.size() - 1]->name().c_str(), system->proc[sDMmanagerPortBindcnt - 1]->sDMmanager->memPort.name().c_str());
 }
 
 CoherentXBar::~CoherentXBar()
