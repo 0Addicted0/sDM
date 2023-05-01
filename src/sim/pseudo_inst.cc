@@ -632,11 +632,11 @@ namespace gem5
             // tc->getProcessPtr()->sDMmanager->sdm_register(pid,vaddr,size);
             Process *process = tc->getProcessPtr();
             uint64_t pid = process->pid();
-            if (process->sDMmanager->sDMspace_register(pid, vaddr, size))
-            {
-                return true;
-            }
-            return false;
+            // if (process->sDMmanager->sDMspace_register(pid, vaddr, size))
+            // {
+            //     return true;
+            // }
+            // return false;
         }
 
     } // namespace pseudo_inst

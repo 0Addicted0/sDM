@@ -27,17 +27,18 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from m5.SimObject import SimObject
+#from m5.SimObject import SimObject
+from m5.objects.ClockedObject import ClockedObject
 from m5.params import *
 from m5.proxy import *
 
 
-class sDMmanager(SimObject):
+class sDMmanager(ClockedObject):
     type = "sDMmanager"
     cxx_header = "mem/sDM/sDM.hh"
     cxx_class = "gem5::sDM::sDMmanager"
     # process = Param.Process("owner process")
     local_pool_id = Param.Int(0, "the pool id of local memory")
     remote_pool_id = Param.Int(0, "the pool id of remote memory")
-    memPort = RequestPort("memory side port, send requests")
+    mem_side = RequestPort("memory side port, send requests")
     system = Param.System(Parent.any, "System we belong to")

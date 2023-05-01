@@ -27,6 +27,7 @@
 #include "../port.hh"
 #include "../../sim/sim_object.hh"
 #include "../../sim/process.hh"
+#include "../../sim/clocked_object.hh"
 
 #include <map>
 #include <cassert>
@@ -245,7 +246,7 @@ namespace gem5
         /**
          * sDMmanager管理所有sdm相关操作，是sdm的硬件抽象
          */
-        class sDMmanager : public SimObject
+        class sDMmanager : public ClockedObject
         {
         public:
             class sDMPort : public RequestPort

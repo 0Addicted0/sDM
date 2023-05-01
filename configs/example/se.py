@@ -125,13 +125,13 @@ def get_processes(args):
             process.errout = errouts[idx]
 
         # by psj
-        sDMmanager = sDM.sDMmanager()
-        process.sDMmanager = sDMmanager
+        # sDMmanager = sDM.sDMmanager()
+        process.sDMmanager = sDMmanager()
         # sDMmanager.process = process
-        # sDMmanager.remote_pool_id = pool_ids_v[0]
-        # sDMmanager.local_pool_id = pool_ids_v[1]
+        process.sDMmanager.remote_pool_id = pool_ids_v[0]
+        process.sDMmanager.local_pool_id = pool_ids_v[1]
 
-        sDMmanagers.append(sDMmanager)
+        #system.sDMmanagers.append(sDMmanager)
         multiprocesses.append(process)
         idx += 1
 
@@ -152,7 +152,7 @@ if "--ruby" in sys.argv:
 args = parser.parse_args()
 
 multiprocesses = []
-sDMmanagers = []
+#system.sDMmanagers = []
 numThreads = 1
 
 if args.bench:
@@ -302,13 +302,21 @@ if args.ruby:
 else:
     MemClass = Simulation.setMemClass(args)
     system.membus = SystemXBar()
+    # system.SimpleMemobj = SimpleMemobj()
+    # system.sDMmanager = sDMmanager()
+
     system.system_port = system.membus.cpu_side_ports
     CacheConfig.config_cache(args, system)
     MemConfig.config_mem(args, system)
+
+    for proc in multiprocesses:
+        proc.sDMmanager.mem_side = system.membus.cpu_side_ports
+    # system.SimpleMemobj.mem_side = system.membus.cpu_side_ports
+    # system.sDMmanager.mem_side = system.membus.cpu_side_ports
     config_filesystem(system, args)
 
-    for sDMmanager in sDMmanagers:
-        sDMmanager.memPort = system.membus.cpu_side_ports
+    #for sDMmanager in system.sDMmanagers:
+    #    sDMmanager.memPort = system.membus.cpu_side_ports
     
 system.workload = SEWorkload.init_compatible(mp0_path)
 

@@ -49,7 +49,7 @@ namespace gem5
          * instance = sDMmanager(params=params)
          * @attention 待传入参数
          */
-        sDMmanager::sDMmanager(const sDMmanagerParams &params) : SimObject(params),
+        sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
                                                                  memPort(params.name + ".mem_side", this),
                                                                  _requestorId(params.system->getRequestorId(this)),
                                                                 //  process(params.process),

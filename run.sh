@@ -14,4 +14,4 @@ build/X86/gem5.opt \
     --l2cache --l2_size=16kB \
     --num-l2caches=2 --mem-size=32MB --pool_ids='0,1;0,2' \
     --cpu-type=X86TimingSimpleCPU --num-cpu=2 \
-    --cmd='/home/yqy/gem5/tests/malloctest/hello.o;/home/yqy/gem5/tests/malloctest/malloctest.o' \
+    --cmd='/home/yqy/sDM/tests/malloctest/hello.o;/home/yqy/sDM/tests/malloctest/malloctest.o' \
