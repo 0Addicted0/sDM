@@ -183,10 +183,9 @@ namespace gem5
         // sDMmanager->remote_pool_id = pool_ids[0];
         // 默认将可用池的第二个视作本地内存
         // sDMmanager->local_pool_id = pool_ids[1];
+        sDMmanager->mem_pools = &(this->seWorkload->memPools);
         sDMmanager->process = this;
-        // sDMmanager->mem_pools = &(this->seWorkload->memPools);
-        //sDMmanager->process = this;
-        //printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
+        printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
         // system->proc.push_back(this);
     }
 

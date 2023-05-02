@@ -259,12 +259,13 @@ namespace gem5
                 sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager),
                                                                              sdmmanager(_sdmmanager)
                 {
-                    printf("name:%s sDMmanager:%p",_name.c_str(), _sdmmanager);
-                    if(isConnected())
+                    printf("name:%s sDMmanager:%p", _name.c_str(), _sdmmanager);
+                    if (isConnected())
                     {
-                        printf(" peer:%s",getPeer().name().c_str());
+                        printf(" peer:%s", getPeer().name().c_str());
                     }
-                    else printf(" unconnected");
+                    else
+                        printf(" unconnected");
                     printf("\n!!sDMPort init!!\n");
                 }
 
@@ -289,7 +290,7 @@ namespace gem5
             /**
              * @author psj
              * @brief 返回当前sDMmanager的_requestorId
-            */
+             */
             RequestorID requestorId() { return _requestorId; }
 
             // private:
@@ -298,11 +299,11 @@ namespace gem5
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
             RequestorID _requestorId;
-            Process *process;        // 是为了使用pTable而引入与实际情况是不相符的
-            sdmIDtype sdm_space_cnt; // 全局单增,2^64永远不会耗尽, start from 1
-            int local_pool_id;       // 记录每个process/workload的本地pool的编号
-            int remote_pool_id;      // 可用本地内存池(内存段)编号
-            MemPools *mem_pools;     // 实例化时的内存池指针
+            Process *process;                 // 是为了使用pTable而引入与实际情况是不相符的
+            sdmIDtype sdm_space_cnt;          // 全局单增,2^64永远不会耗尽, start from 1
+            int local_pool_id;                // 记录每个process/workload的本地pool的编号
+            int remote_pool_id;               // 可用本地内存池(内存段)编号
+            MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
@@ -322,10 +323,10 @@ namespace gem5
             bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
-            bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h, 
+            bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
             void write(PacketPtr pkt);
-            void read(PacketPtr pkt, uint8_t * pkt_data_ptr, Addr vaddr);
+            void read(PacketPtr pkt, uint8_t *pkt_data_ptr, Addr vaddr);
 
             Port &
             getPort(const std::string &if_name, PortID idx = InvalidPortID) override

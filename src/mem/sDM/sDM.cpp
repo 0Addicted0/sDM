@@ -52,7 +52,7 @@ namespace gem5
         sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
                                                                  memPort(params.name + ".mem_side", this),
                                                                  _requestorId(params.system->getRequestorId(this)),
-                                                                //  process(params.process),
+                                                                 //  process(params.process),
                                                                  local_pool_id(params.local_pool_id),
                                                                  remote_pool_id(params.remote_pool_id)
 
@@ -60,10 +60,10 @@ namespace gem5
             has_recv = 0;
             pkt_recv = NULL;
             // 请添加retry pkt
-            printf("sDM.cpp process=%p,sDMmanager=%p\n",process,this);
+            printf("sDM.cpp process=%p,sDMmanager=%p\n", process, this);
             // std::cout << "!!sDMmanager!!\n"
-                    //   << "requestorID"
-                    //   << " " << _requestorId << std::endl;
+            //   << "requestorID"
+            //   << " " << _requestorId << std::endl;
         }
         /**
          * @brief
@@ -113,8 +113,9 @@ namespace gem5
             pkt->allocate();
             pkt->setData((const uint8_t *)data);
             memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
+
             // ys debug
-            // printf("write2mem over \n");
+            printf("write2mem over \n");
             return;
         }
         /**
@@ -128,10 +129,12 @@ namespace gem5
         sDMmanager::sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list)
         {
             // 这里直接调用
+            printf("[%ld]in sdm_malloc npages=%d pool_id=%d\n", curTick(), npages, pool_id);
             Addr start = mem_pools->allocPhysPages(npages, pool_id); // 调用gem5物理内存分配函数直接分配
             // 由于gem5本身没有处理不连续的地址情况,所以一定是连续的
             if (start == POOL_EXHAUSTED)
             {
+                printf("pool exhausted\n");
                 // 本地内存耗尽
                 return false;
             }
@@ -438,7 +441,7 @@ namespace gem5
             // 加密数据
 
             // 计算HMAC
-            sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM;// debug(unused)? yqy
+            sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM; // debug(unused)? yqy
 
             assert(r_hmac_phy_list.size() > 0);
             int hmacpageindx = 0; // 存hmac的物理页面列表的索引
@@ -491,7 +494,7 @@ namespace gem5
                     i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
                     _iit_Node node;
                     // 算hash_tag
-                    CL_Counter counter;// debug(CL_counter)?
+                    CL_Counter counter; // debug(CL_counter)?
                     uint8_t hmac[8];
                     memset(counter, 0, sizeof(CL_Counter));
                     if (leaf)
@@ -540,6 +543,8 @@ namespace gem5
             assert(((vaddr & (PAGE_SIZE - 1)) == 0) &&
                    ((data_byte_size & (PAGE_SIZE - 1)) == 0) &&
                    "vaddr or size is not aligned pagesize");
+            printf("[%ld]in sDMspace_register: pid=%ld vaddr=%lx size=%ld\n", \
+                        curTick(), pid, vaddr, data_byte_size);
             // 准备新空间的metadata
             sdm_space sp;
             // 1. 计算data大小
@@ -575,8 +580,8 @@ namespace gem5
             std::vector<phy_space_block> r_hmac_phy_list;
             std::vector<phy_space_block> r_iit_phy_list;
             // ys(debug):hmac空间大小可能没有按照页对齐，应向上取整
-            sdm_malloc(ceil(hmac_size, PAGE_SIZE), remote_pool_id, r_hmac_phy_list);
-            sdm_malloc(ceil(iit_size, PAGE_SIZE), remote_pool_id, r_iit_phy_list);
+            assert(sdm_malloc(ceil(hmac_size, PAGE_SIZE), remote_pool_id, r_hmac_phy_list));
+            assert(sdm_malloc(ceil(iit_size, PAGE_SIZE), remote_pool_id, r_iit_phy_list));
             // 初始化HMAC和iit区域(将数据区置0)
             sdm_CMEKey tmp_ckey;
             sp.key_get(CME_KEY_TYPE, tmp_ckey);
@@ -592,8 +597,8 @@ namespace gem5
             // 向本地申请内存空间
             std::vector<phy_space_block> l_hmac_phy_list;
             std::vector<phy_space_block> l_iit_phy_list;
-            sdm_malloc(hmac_lpage_num, local_pool_id, l_hmac_phy_list);
-            sdm_malloc(iit_lpage_num, local_pool_id, l_iit_phy_list);
+            assert(sdm_malloc(hmac_lpage_num, local_pool_id, l_hmac_phy_list));
+            assert(sdm_malloc(iit_lpage_num,  local_pool_id, l_iit_phy_list));
             printf("l_hmac_phy_list size %ld\n", l_hmac_phy_list.size());
             printf("590 sdm_malloc over\n");
             // 构建两个链表
