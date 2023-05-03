@@ -156,6 +156,9 @@ namespace gem5
         sdmIDtype sDMmanager::isContained(Addr vaddr)
         {
             vaddr &= PAGE_ALIGN_MASK;
+            if(sdm_paddr2id.size()==0){
+                return 0;
+            }
             auto it = sdm_paddr2id.lower_bound(vaddr);
             if (it != sdm_paddr2id.end() && it->first == vaddr)
                 return it->second.second;
@@ -587,7 +590,7 @@ namespace gem5
             sp.key_get(CME_KEY_TYPE, tmp_ckey);
             sdm_hashKey tmp_hkey;
             sp.key_get(HASH_KEY_TYPE, tmp_hkey);
-            // sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list);
+            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list);
             printf("skip init\n");
             // 预估所需页面数量,同时填写跳数、每页可写数据对数量
             int hmac_per,
@@ -599,20 +602,21 @@ namespace gem5
             std::vector<phy_space_block> l_iit_phy_list;
             assert(sdm_malloc(hmac_lpage_num, local_pool_id, l_hmac_phy_list));
             assert(sdm_malloc(iit_lpage_num,  local_pool_id, l_iit_phy_list));
-            printf("l_hmac_phy_list size %ld\n", l_hmac_phy_list.size());
-            printf("590 sdm_malloc over\n");
+            // printf("l_hmac_phy_list size %ld\n", l_hmac_phy_list.size());
+            // printf("590 sdm_malloc over\n");
             // 构建两个链表
             sp.HMACPtrPagePtr = (sdm_hmacPagePtrPagePtr)(l_hmac_phy_list[0].start);
             // 构建hmac skip-list
-            printf("596 start build_SkipList\n");
+            // printf("596 start build_SkipList\n");
             build_SkipList(r_hmac_phy_list, l_hmac_phy_list, sp.hmac_skip, hmac_per, hmac_lpage_num);
             // 构建iit skip-list
             build_SkipList(r_iit_phy_list, l_iit_phy_list, sp.iit_skip, iit_per, iit_lpage_num);
-            printf("build_SkipList over\n");
+            // printf("build_SkipList over\n");
             // 这里的sdm_table、sdm_paddr2id查询还没有接入gem5内存系统
             sdm_table.push_back(sp);
             // 加入到vaddr->id查询表
             sdm_paddr2id.insert(std::make_pair(vaddr, std::make_pair(data_size, sp.id)));
+            printf("register over\n");
             return true;
         }
         /**
