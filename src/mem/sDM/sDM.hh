@@ -248,6 +248,8 @@ namespace gem5
          */
         class sDMmanager : public ClockedObject
         {
+        private:
+                void write2gem5(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
         public:
             class sDMPort : public RequestPort
             {
@@ -280,6 +282,7 @@ namespace gem5
                 }
                 void recvReqRetry()
                 {
+                    printf("sDMmanager retry!\n");
                     panic("%s does not expect a retry\n", name());
                 }
             };

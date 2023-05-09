@@ -193,6 +193,9 @@ BaseXBar::Layer<SrcType, DstType>::tryTiming(SrcType* src_port)
     // for a retry from the peer
     if (state == BUSY || waitingForPeer != NULL) {
         // the port should not be waiting already
+        // if(std::find(waitingForLayer.begin(), waitingForLayer.end(), src_port) != waitingForLayer.end())
+        //     printf("xbar.cc: %s has in\n",src_port->name().c_str());
+
         assert(std::find(waitingForLayer.begin(), waitingForLayer.end(),
                          src_port) == waitingForLayer.end());
 

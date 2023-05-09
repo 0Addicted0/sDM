@@ -155,6 +155,8 @@ CoherentXBar::init()
 bool
 CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 {
+    // if(pkt->requestorId() == 10)// system.cpu1.workload.sDMmanager.mem_side.requestorId
+    //     printf("!!recvTimingReq from sDMmanager!!: %s\n",pkt->print().c_str());
     // determine the source port based on the id
     ResponsePort *src_port = cpuSidePorts[cpu_side_port_id];
 
@@ -172,12 +174,12 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     // port, and exclude express snoops from the check
     if (!is_express_snoop &&
         !reqLayers[mem_side_port_id]->tryTiming(src_port)) {
-        DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
+        DPRINTF(CoherentXBar, "(175)%s: src %s packet %s BUSY\n", __func__, // yqy mark
                 src_port->name(), pkt->print());
         return false;
     }
 
-    DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
+    DPRINTF(CoherentXBar, "(180)%s: src %s packet %s\n", __func__, // yqy mark
             src_port->name(), pkt->print());
 
     // store size and command as they might be modified when
@@ -207,7 +209,6 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         pkt->cmd != MemCmd::WriteClean;
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
-
         if (pkt->isClean() && !is_destination) {
             // before snooping we need to make sure that the memory
             // below is not busy and the cache clean request can be
@@ -223,17 +224,18 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             }
         }
 
-
         // the packet is a memory-mapped request and should be
         // broadcasted to our snoopers but the source
         if (snoopFilter) {
+            // if(pkt->requestorId() == 10)// system.cpu1.workload.sDMmanager.mem_side.requestorId
+            //     printf("->snoop_caches!!");
             // check with the snoop filter where to forward this packet
             auto sf_res = snoopFilter->lookupRequest(pkt, *src_port);
             // the time required by a packet to be delivered through
             // the xbar has to be charged also with to lookup latency
             // of the snoop filter
             pkt->headerDelay += sf_res.second * clockPeriod();
-            DPRINTF(CoherentXBar, "%s: src %s packet %s SF size: %i lat: %i\n",
+            DPRINTF(CoherentXBar, "(236)%s: src %s packet %s SF size: %i lat: %i\n",
                     __func__, src_port->name(), pkt->print(),
                     sf_res.first.size(), sf_res.second);
 
@@ -249,6 +251,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 forwardTiming(pkt, cpu_side_port_id, sf_res.first);
             }
         } else {
+            // if(pkt->requestorId() == 10)// system.cpu1.workload.sDMmanager.mem_side.requestorId
+            //     printf("before wrong");
             forwardTiming(pkt, cpu_side_port_id);
         }
 
@@ -297,7 +301,15 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             }
 
             // since it is a normal request, attempt to send the packet
-            success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+            // if(pkt->requestorId() == 10 && pkt->getAddr()==0x20000000010)
+            // {
+            //     printf("success:%d\n", success);
+            // }
+            success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);//to mem ctrl
+            // if(pkt->requestorId() == 10 && pkt->getAddr()==0x20000000010)
+            // {
+            //     printf("success:%d\n", success);
+            // }
         } else {
             // no need to forward, turn this packet around and respond
             // directly
@@ -357,6 +369,19 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
             // update the layer state and schedule an idle event
             reqLayers[mem_side_port_id]->succeededTiming(packetFinishTime);
+            // yqy
+            if(pkt->requestorId() == 10)
+            {
+                auto h = this->eventq->getHead();
+                this->eventq->unlock();
+                while(h && h->when() <= packetFinishTime)
+                {
+                    // printf("service %s\n",pkt->print().c_str());
+                    this->eventq->serviceOne();
+                    h = this->eventq->getHead();
+                }
+                this->eventq->lock();
+            }
         }
 
         // stats updates only consider packets that were successfully sent

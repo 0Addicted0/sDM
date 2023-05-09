@@ -129,7 +129,7 @@ void
 RequestPort::bind(Port &peer)
 {
     auto *response_port = dynamic_cast<ResponsePort *>(&peer);
-    printf("port.cc bind: %s <--> %s\n",name().c_str(),peer.name().c_str());
+    // printf("port.cc bind: %s <--> %s\n",name().c_str(),peer.name().c_str());
     fatal_if(!response_port, "Can't bind port %s to non-response port %s.",
              name(), peer.name());
     // request port keeps track of the response port
