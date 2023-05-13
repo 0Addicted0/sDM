@@ -43,6 +43,8 @@
  * Definition of a crossbar object.
  */
 
+#include "mem/sDM/sDM_def.hh"
+
 #include "mem/coherent_xbar.hh"
 
 #include "base/compiler.hh"
@@ -54,6 +56,7 @@
 
 // 用于记录下一个待绑定的sDMmanager的memPort
 // int sDMmanagerPortBindcnt = 0;
+#define ENDTIME 0xFFFFFFFFFFFFFFFF
 namespace gem5
 {
 
@@ -71,7 +74,7 @@ CoherentXBar::CoherentXBar(const CoherentXBarParams &p)
                "Request fanout histogram")
 {
     // yqy makr
-    printf("!!membus constructed!!: memside=%d,default=%d,cpuside=%d\n",p.port_mem_side_ports_connection_count,p.port_default_connection_count,p.port_cpu_side_ports_connection_count);
+    // printf("!!membus constructed!!: memside=%d,default=%d,cpuside=%d\n",p.port_mem_side_ports_connection_count,p.port_default_connection_count,p.port_cpu_side_ports_connection_count);
     
     // create the ports based on the size of the memory-side port and
     // CPU-side port vector ports, and the presence of the default port,
@@ -155,8 +158,9 @@ CoherentXBar::init()
 bool
 CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 {
-    // if(pkt->requestorId() == 10)// system.cpu1.workload.sDMmanager.mem_side.requestorId
-    //     printf("!!recvTimingReq from sDMmanager!!: %s\n",pkt->print().c_str());
+    sDM::maxTick = this->eventq->getHead()->when();
+    // Event * old_head = this->eventq->getHead();// maybe useless
+
     // determine the source port based on the id
     ResponsePort *src_port = cpuSidePorts[cpu_side_port_id];
 
@@ -174,12 +178,12 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     // port, and exclude express snoops from the check
     if (!is_express_snoop &&
         !reqLayers[mem_side_port_id]->tryTiming(src_port)) {
-        DPRINTF(CoherentXBar, "(175)%s: src %s packet %s BUSY\n", __func__, // yqy mark
+        DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__, // yqy mark
                 src_port->name(), pkt->print());
         return false;
     }
 
-    DPRINTF(CoherentXBar, "(180)%s: src %s packet %s\n", __func__, // yqy mark
+    DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__, // yqy mark
             src_port->name(), pkt->print());
 
     // store size and command as they might be modified when
@@ -251,8 +255,6 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 forwardTiming(pkt, cpu_side_port_id, sf_res.first);
             }
         } else {
-            // if(pkt->requestorId() == 10)// system.cpu1.workload.sDMmanager.mem_side.requestorId
-            //     printf("before wrong");
             forwardTiming(pkt, cpu_side_port_id);
         }
 
@@ -306,10 +308,13 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             //     printf("success:%d\n", success);
             // }
             success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);//to mem ctrl
-            // if(pkt->requestorId() == 10 && pkt->getAddr()==0x20000000010)
-            // {
-            //     printf("success:%d\n", success);
-            // }
+            if(pkt->requestorId() == 10)
+            {
+                if(!success)
+                    // printf("%s success\n", pkt->print().c_str());
+                // else 
+                    printf("%s failed\n", pkt->print().c_str());
+            }
         } else {
             // no need to forward, turn this packet around and respond
             // directly
@@ -369,17 +374,33 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
             // update the layer state and schedule an idle event
             reqLayers[mem_side_port_id]->succeededTiming(packetFinishTime);
-            // yqy
-            if(pkt->requestorId() == 10)
+            sDM::maxTick = std::max(sDM::maxTick, packetFinishTime);
+            // waitForLayer patch
+            if(pkt->requestorId() == 10)// send by sDMmanager
             {
                 auto h = this->eventq->getHead();
                 this->eventq->unlock();
-                while(h && h->when() <= packetFinishTime)
+                // if(pkt->isWrite())
+                // {
+                //     printf("before serviceOne ");
+                //     this->eventq->dump();
+                // }
+                while(h && h->when() <= sDM::maxTick)
                 {
-                    // printf("service %s\n",pkt->print().c_str());
+                    // printf("when=%ld , maxTick=%ld\n", h->when(), sDM::maxTick);
                     this->eventq->serviceOne();
                     h = this->eventq->getHead();
                 }
+                // 在processNextReqEvent函数中会存在重新添加req到evenq的情况:刷新请求与req冲突
+                // if(curTick()>=7279575000000)
+                // {
+                    // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
+                    // this->eventq->serviceOne();// psj
+                    // printf("(maxTick=%ld)after serviceOne\n",sDM::maxTick);
+                    // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
+                    // this->eventq->dump();
+                    // printf("\n\n");
+                // }
                 this->eventq->lock();
             }
         }

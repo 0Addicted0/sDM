@@ -4,8 +4,10 @@
 
 namespace gem5
 {
+    std::unordered_map<uint64_t, uint64_t> rpTable;
     namespace sDM
     {
+        uint64_t maxTick;
         /**
          * @brief
          * 向上取整除法
@@ -78,10 +80,30 @@ namespace gem5
          */
         void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
         {
+            assert((byte_size % CL_SIZE == 0) && "write2Mem: byte_size is aligned by CL_SIZE");
+            int num = byte_size / CL_SIZE;
+            if (!num)
+            {
+                printf("req size < CL_SIZE\n");
+                read4gem5(byte_size, container, gem5_addr);
+            }
+            for (int i = 0; i < num; i++)
+            {
+                // printf("read [%ld] %lx\n",curTick(),gem5_addr+ i * CL_SIZE);
+                read4gem5(CL_SIZE, container, gem5_addr + i * CL_SIZE);
+            }
+            return;
+        }
+        /**
+         * @brief:实际从gem5中读取
+         */
+        void sDMmanager::read4gem5(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
+        {
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createRead(req);
             pkt->dataDynamic(new uint8_t[byte_size]);
             // bool res = memPort.sendTimingReq(pkt);
+            maxTick = 0;
             memPort.sendTimingReq(pkt);
             // if (res)
             // {
@@ -99,6 +121,7 @@ namespace gem5
             has_recv = false;
             return;
         }
+
         /**
          * @author psj
          * @brief 将连续数据写入到gem5内存中
@@ -116,6 +139,8 @@ namespace gem5
             // ys debug 设置flag
             pkt->allocate();
             pkt->setData((const uint8_t *)data);
+            // pkt->set_sdmflag();
+            maxTick = 0;
             if (memPort.sendTimingReq(pkt)) //  packet mem[i]->gem5MemPtr->[i];...
             {
                 // 发送成功可以直接删除pkt,否则在recvReqretry中处理
@@ -133,7 +158,7 @@ namespace gem5
          */
         void sDMmanager::write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
         {
-            assert(byte_size >= CL_SIZE && "write2Mem: byte_size < CL_SIZE");
+            assert(byte_size >= CL_SIZE && "write2Mem: byte_size >= CL_SIZE");
             assert((byte_size % CL_SIZE == 0) && "write2Mem: byte_size is aligned by CL_SIZE");
             // divide into CL_SIZE
             uint32_t num = byte_size / CL_SIZE;
@@ -366,7 +391,7 @@ namespace gem5
             // 前面累积的物理空间逻辑大小
             uint32_t logic_npages = 0;
             sdm_hmacPagePtrPage mem[lnpages]; // 用于暂时组织数据,然后统一调用packet将数据写到hmacPtrPagePtr对应的本地页中
-            // 先在缓冲中填写每一个页面
+            // 先在缓冲mem中填写每一个页面
             while (cur_pair < remote_phy_list.size()) // 所有页面数据对
             {
                 // 每次都开始写一个新的本地页面
@@ -406,8 +431,8 @@ namespace gem5
                 else
                 {
                     mem[seg_start].cur_segMax.maxBound = logic_npages * PAGE_SIZE;
-                    printf("in build_SkipList, write2Mem, head[%lx],p[%lx]\n", ptrPagePtr[cur], ptrPagePtr[seg_start] + PAGE_SIZE - PAIR_SIZE);
-                    write2Mem(PAIR_SIZE, (uint8_t *)&(mem[seg_start].cur_segMax), ptrPagePtr[seg_start] + PAGE_SIZE - PAIR_SIZE);
+                    // printf("in build_SkipList, write2Mem, head[%lx],p[%lx]\n", ptrPagePtr[cur], ptrPagePtr[seg_start] + PAGE_SIZE - PAIR_SIZE);
+                    // write2Mem(PAIR_SIZE, (uint8_t *)&(mem[seg_start].cur_segMax), ptrPagePtr[seg_start] + PAGE_SIZE - PAIR_SIZE);
                     // 该连续段已用完
                     if (cur_pair < remote_phy_list.size() && cur_seg < local_phy_list.size()) // 防止最后一个页面越界
                     {
@@ -419,8 +444,9 @@ namespace gem5
                     }
                 }
                 // 先写入该页面的pair数据对到gem5内存
-                printf("in build_SkipList, write2Mem, head[%lx],p[%lx]\n", ptrPagePtr[cur], ptrPagePtr[cur] + sizeof(skip_jmp) * skip);
-                write2Mem(PAGE_SIZE - PAIR_SIZE - skip * sizeof(skip_jmp), (uint8_t *)&(mem[cur].pair[skip]), ptrPagePtr[cur] + sizeof(skip_jmp) * skip);
+                // printf("in build_SkipList, write2Mem, head[%lx],p[%lx]\n", ptrPagePtr[cur], ptrPagePtr[cur] + sizeof(skip_jmp) * skip);
+                // yqy 改为统一写入
+                // write2Mem(PAGE_SIZE - PAIR_SIZE - skip * sizeof(skip_jmp), (uint8_t *)&(mem[cur].pair[skip]), ptrPagePtr[cur] + sizeof(skip_jmp) * skip);
                 cur++;
             }
             // 回写skip list的next.max_bound
@@ -430,8 +456,12 @@ namespace gem5
                 {
                     mem[i].jmp[j].maxBound = mem[i + (1 << j)].cur_segMax.maxBound;
                 }
-                write2Mem(sizeof(skip_jmp) * skip, (uint8_t *)&mem[i], ptrPagePtr[i]); // 重写这些部分
+                // yqy 改为统一写入
+                // write2Mem(sizeof(skip_jmp) * skip, (uint8_t *)&mem[i], ptrPagePtr[i]); // 重写这些部分
             }
+            // 分多次写入 -> 统一写入
+            for (int i = 0; i < local_phy_list.size(); i++)
+                write2Mem(PAGE_SIZE, (uint8_t *)&mem[i], local_phy_list[i].start);
         }
         /**
          * @author: ys
@@ -444,7 +474,8 @@ namespace gem5
          * @param {vector<phy_space_block>} r_iit_phy_list 远端存放iit的物理地址
          * @return {*}
          */
-        void sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list)
+        void sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey,
+                                       std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list)
         {
             assert(r_hmac_phy_list.size() > 0);
             // 向数据空间写入0(并加密)
@@ -459,12 +490,14 @@ namespace gem5
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
                 Addr hpageAddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
-                uint64_t ofset = (paddr - hpageAddr) / CL_SIZE;
-                CME::sDM_Encrypt(buf, cl, sizeof(cl), hpageAddr + ofset * CL_SIZE, ckey); // 加密数据
-                write2Mem(CL_SIZE, buf, paddr);                                           // 写回内存
+                uint64_t offset = (paddr - hpageAddr) / CL_SIZE;
+                CME::sDM_Encrypt(buf, cl, sizeof(cl), hpageAddr + offset * CL_SIZE, ckey); // 加密数据
+
+                write2Mem(CL_SIZE, buf, paddr); // 写回内存
+                // printf("[%ld] %d addr:%lx\n", curTick(),i, paddr);
                 addr += CL_SIZE;
             }
-            printf("in sdm_init CME done\n");
+            printf("[%ld] sdm_init CME done\n", curTick());
             addr = vaddr;
 
             // 计算HMAC
@@ -473,6 +506,7 @@ namespace gem5
             auto block = r_hmac_phy_list[hmacpageindx++];
             Addr hmacpageAddrstart = block.start;                          // 存放hmac的起始物理地址(远端)
             Addr hmacpageAddrend = block.start + PAGE_SIZE * block.npages; // 该数据对对应的结束地址
+            uint8_t hmac[SM3_SIZE * 2];
             for (int i = 0; i < byte_size / (PAGE_SIZE >> 1); i++)
             {
                 Addr hpageAddr = (addr & PAGE_ALIGN_MASK) + (addr & (PAGE_SIZE >> 1)); // 加密使用的缓存行地址
@@ -482,12 +516,11 @@ namespace gem5
                 Addr paddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
                 read4Mem(PAGE_SIZE >> 1, dataptr, paddr); // 被加密的数据
                 iit_NodePtr counter = new iit_Node();     // new 会将结构体内部置0
-                uint8_t hmac[SM3_SIZE];
+
                 CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, hpageAddr, (uint8_t *)counter,
-                              sizeof(iit_Node), hmac, SM3_SIZE); // 计算hash值，存入hmac
+                              sizeof(iit_Node), hmac + (i & 1) * SM3_SIZE, SM3_SIZE); // 计算hash值，存入hmac
                 if (hmacpageAddrstart < hmacpageAddrend)
                 {
-                    write2Mem(SM3_SIZE, hmac, hmacpageAddrstart);
                     hmacpageAddrstart += SM3_SIZE;
                 }
                 else
@@ -496,8 +529,11 @@ namespace gem5
                     auto block = r_hmac_phy_list[hmacpageindx++];
                     hmacpageAddrstart = block.start;
                     hmacpageAddrend = hmacpageAddrstart + block.npages * PAGE_SIZE;
-                    write2Mem(SM3_SIZE, hmac, hmacpageAddrstart);
                     hmacpageAddrstart += SM3_SIZE;
+                }
+                if ((i & 1) == 1)
+                {
+                    write2Mem(SM3_SIZE * 2, hmac, hmacpageAddrstart - SM3_SIZE * 2);
                 }
             }
             printf("in sdm_init hmac done\n");
@@ -594,7 +630,8 @@ namespace gem5
             sdm_size iit_size = getIITsize(data_size, h);
             // 3. 计算HMAC大小
             sdm_size hmac_size = data_size / SDM_HMAC_ZOOM;
-            // sdm_size extra_size = iit_size + hmac_size;// 额外所需空间的总大小
+            sdm_size extra_size = iit_size + hmac_size; // 额外所需空间的总大小
+            printf("sDMspace_register: extra size=%ldMB(%ldkB %ldkB)\n", extra_size / PAGE_SIZE / 1024, iit_size / PAGE_SIZE, hmac_size / PAGE_SIZE);
             // 为新空间设置id
             sp.id = ++sdm_space_cnt;
             sp.iITh = h;

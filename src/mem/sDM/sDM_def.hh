@@ -1,6 +1,7 @@
 #ifndef _SDM_DEF_HH_
 #define _SDM_DEF_HH_
 #include <stdint.h>
+#include <unordered_map>
 
 #define BYTE2BIT 8
 
@@ -43,8 +44,10 @@
 #define CME_KEY_TYPE 1
 namespace gem5
 {
+    extern std::unordered_map<uint64_t, uint64_t> rpTable;
     namespace sDM
     {
+        extern uint64_t maxTick;
         typedef uint64_t Addr; // 64位地址类型
     }
 }

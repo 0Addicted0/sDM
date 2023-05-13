@@ -84,15 +84,19 @@ SEWorkload::allocPhysPages(int npages, int pool_id)
 Addr
 SEWorkload::allocPhysPages(int npages, std::vector<int>& pools_id)
 {
-    Addr allocated_addr = POOL_EXHAUSTED;
+    Addr allocated_addr = 0;
     // Try in all available memory pools
     for (int pool_id : pools_id){
-        allocated_addr = memPools.allocPhysPages(npages, pool_id);
-        if (allocated_addr != POOL_EXHAUSTED)
+        if(npages <= memPools.freePages(pool_id)){
+            allocated_addr = memPools.allocPhysPages(npages, pool_id);
+            npages = 0;
             break;
+        }
+        // else 
+            // printf("exthausted:%d > %ld [%d]\n",npages,memPools.freePages(pool_id),pool_id);
     }
 
-    fatal_if(allocated_addr == POOL_EXHAUSTED,
+    fatal_if(npages > 0,
             "Out of memory, please increase size of physical memory.");
 
     return allocated_addr;

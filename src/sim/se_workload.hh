@@ -92,10 +92,10 @@ namespace gem5
 
         Addr allocPhysPages(int npages, int pool_id = 0);
         /*
-         * Define a new allocation function
-         * uses the available memory pool ids vector as an argument
-         */
-        Addr allocPhysPages(int npages, std::vector<int> &pools_id);
+        * Define a new allocation function
+        * uses the available memory pool ids vector as an argument
+        */
+        Addr allocPhysPages(int npages, std::vector<int>& pools_id);
 
         Addr memSize(int pool_id = 0) const;
         Addr freeMemSize(int pool_id = 0) const;

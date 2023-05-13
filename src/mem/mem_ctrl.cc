@@ -37,6 +37,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "mem/sDM/sDM_def.hh"
 
 #include "mem/mem_ctrl.hh"
 
@@ -82,7 +83,7 @@ MemCtrl::MemCtrl(const MemCtrlParams &p) :
 {
     DPRINTF(MemCtrl, "Setting up controller\n");
     // yqy mark
-    printf("!!MemCtrl constructed!!\n");
+    // printf("!!MemCtrl constructed!!\n");
     readQueue.resize(p.qos_priorities);
     writeQueue.resize(p.qos_priorities);
 
@@ -458,6 +459,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             if (!nextReqEvent.scheduled()) {
                 DPRINTF(MemCtrl, "Request scheduled immediately\n");
                 schedule(nextReqEvent, curTick());
+                sDM::maxTick = std::max(sDM::maxTick, curTick());// patch
             }
             stats.writeReqs++;
             stats.bytesWrittenSys += size;
@@ -468,6 +470,10 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
         if (readQueueFull(pkt_count)) {
             DPRINTF(MemCtrl, "Read queue full, not accepting\n");
             // remember that we have to retry this port
+            // if(pkt->requestorId()==10)
+            // {
+            //     printf("%s (%d)\n",pkt->print().c_str(),pkt_count);
+            // }
             retryRdReq = true;
             stats.numRdRetry++;
             return false;
@@ -478,6 +484,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 if (!nextReqEvent.scheduled()) {
                     DPRINTF(MemCtrl, "Request scheduled immediately\n");
                     schedule(nextReqEvent, curTick());
+                    sDM::maxTick = std::max(sDM::maxTick, curTick());// patch
                 }
             }
             stats.readReqs++;
@@ -500,10 +507,6 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
 
     MemPacket* mem_pkt = queue.front();
 
-    // yqy mark
-    // if(mem_pkt->pkt)
-    //     printf("[%ld]mem_ctrl.cc processRespondEvent:%s\n",curTick(),mem_pkt->pkt->print().c_str());
-    // else printf("[%ld]mem_ctrl.cc processRespondEvent\n",curTick());
     // media specific checks and functions when read response is complete
     // DRAM only
     mem_intr->respondEvent(mem_pkt->rank);
@@ -534,6 +537,7 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
         assert(queue.front()->readyTime >= curTick());
         assert(!resp_event.scheduled());
         schedule(resp_event, queue.front()->readyTime);
+        sDM::maxTick = std::max(sDM::maxTick, queue.front()->readyTime);// patch
     } else {
         // if there is nothing left in any queue, signal a drain
         if (drainState() == DrainState::Draining &&
@@ -1028,6 +1032,7 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
             if (resp_queue.empty()) {
                 assert(!resp_event.scheduled());
                 schedule(resp_event, mem_pkt->readyTime);
+                sDM::maxTick = std::max(sDM::maxTick, mem_pkt->readyTime);// patch
             } else {
                 assert(resp_queue.back()->readyTime <= mem_pkt->readyTime);
                 assert(resp_event.scheduled());
@@ -1142,7 +1147,13 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
     // It is possible that a refresh to another rank kicks things back into
     // action before reaching this point.
     if (!next_req_event.scheduled())
-        schedule(next_req_event, std::max(mem_intr->nextReqTime, curTick()));
+    {
+        Tick reTick = std::max(mem_intr->nextReqTime, curTick());
+        schedule(next_req_event, reTick);
+        // 更新新的maxTick 需要在coherent_xbar.cc->recvTimingReq被执行
+        sDM::maxTick = std::max(sDM::maxTick, reTick); // patch
+    }
+        
 
     if (retry_wr_req && totalWriteQueueSize < writeBufferSize) {
         retry_wr_req = false;
@@ -1429,6 +1440,7 @@ MemCtrl::drain()
         // is the write queue, thus kick things into action if needed
         if (!totalWriteQueueSize && !nextReqEvent.scheduled()) {
             schedule(nextReqEvent, curTick());
+            sDM::maxTick = std::max(sDM::maxTick, curTick());// patch
         }
 
         dram->drainRanks();

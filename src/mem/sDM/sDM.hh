@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -148,7 +149,7 @@ namespace gem5
                 sdm_pagePtrPair pair[(PAGE_SIZE / PAIR_SIZE) - 1]; // 剩余可用pair数
             };
             local_jmp cur_segMax; // 当前连续页段的最大,此结构中的next保留未用
-        } sdm_PagePtrPage;
+        } sdm_PagePtrPage;        // PAGE
         typedef sdm_PagePtrPage *sdm_PagePtrPagePtr;
         typedef sdm_PagePtrPage sdm_hmacPagePtrPage;
         typedef sdm_PagePtrPage sdm_iitNodePagePtrPage;
@@ -249,7 +250,9 @@ namespace gem5
         class sDMmanager : public ClockedObject
         {
         private:
-                void write2gem5(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
+            void write2gem5(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
+            void read4gem5(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
+
         public:
             class sDMPort : public RequestPort
             {
@@ -262,13 +265,13 @@ namespace gem5
                                                                              sdmmanager(_sdmmanager)
                 {
                     printf("name:%s sDMmanager:%p", _name.c_str(), _sdmmanager);
-                    if (isConnected())
-                    {
-                        printf(" peer:%s", getPeer().name().c_str());
-                    }
-                    else
-                        printf(" unconnected");
-                    printf("\n!!sDMPort init!!\n");
+                    // if (isConnected())
+                    // {
+                    //     printf(" peer:%s", getPeer().name().c_str());
+                    // }
+                    // else
+                    //     printf(" unconnected");
+                    // printf("\n!!sDMPort init!!\n");
                 }
 
             protected:

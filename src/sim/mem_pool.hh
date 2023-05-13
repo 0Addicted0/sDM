@@ -80,7 +80,7 @@ class MemPool : public Serializable
     Addr freeBytes() const;
     Addr totalBytes() const;
 
-    Addr allocate(Addr npages);
+    Addr allocate(int npages);
 
     void serialize(CheckpointOut &cp) const override;
     void unserialize(CheckpointIn &cp) override;
@@ -101,6 +101,8 @@ class MemPools : public Serializable
     /// Allocate npages contiguous unused physical pages.
     /// @return Starting address of first page
     Addr allocPhysPages(int npages, int pool_id=0);
+
+    Counter freePages(int pool_id=0) const;
 
     /** Amount of physical memory that exists in a pool. */
     Addr memSize(int pool_id=0) const;

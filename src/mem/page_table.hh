@@ -38,12 +38,14 @@
 #include <string>
 #include <unordered_map>
 
+#include "mem/sDM/sDM_def.hh"
 #include "base/bitfield.hh"
 #include "base/intmath.hh"
 #include "base/types.hh"
 #include "mem/request.hh"
 #include "mem/translation_gen.hh"
 #include "sim/serialize.hh"
+
 
 namespace gem5
 {

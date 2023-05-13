@@ -112,14 +112,14 @@ MemPool::totalBytes() const
 }
 
 Addr
-MemPool::allocate(Addr npages)
+MemPool::allocate(int npages)
 {
     Addr return_addr = freePageAddr();
     freePageNum += npages;
-    // current pool has exhausted
-    if (freePages() <= 0)
-        return POOL_EXHAUSTED;
-    // fatal_if is transferred to the upper level function
+    assert(freePages() >= 0 && "Out of memory, please increase size of physical memory.");
+    // }
+    // fatal_if(freePages() <= 0,
+    //     "Out of memory, please increase size of physical memory.");
     return return_addr;
 }
 
@@ -153,9 +153,17 @@ MemPools::populate(const AddrRangeList &memories)
     }
 }
 
+Counter 
+MemPools::freePages(int pool_id) const
+{
+    return pools[pool_id].freePages();
+}
+
 Addr
 MemPools::allocPhysPages(int npages, int pool_id)
 {
+    if(npages>1)
+        printf("mem_pool.cc alloc %ld-%d (id=%d)\n",freePages(pool_id) , npages, pool_id);
     return pools[pool_id].allocate(npages);
 }
 
