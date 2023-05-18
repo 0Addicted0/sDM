@@ -33,4 +33,5 @@ configs/dram/lowp_sweep.cfg
 .pyenv
 .vscode
 /tests/malloctest
+./run.sh
 *.sh

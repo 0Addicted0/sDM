@@ -312,7 +312,7 @@ namespace gem5
             MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
-            std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
+            std::map<Addr, std::pair<size_t, sdmIDtype>>  sdm_paddr2id;
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
             void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
                                 int skip, int ac_num, int lnpages);

@@ -311,8 +311,6 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             if(pkt->requestorId() == 10)
             {
                 if(!success)
-                    // printf("%s success\n", pkt->print().c_str());
-                // else 
                     printf("%s failed\n", pkt->print().c_str());
             }
         } else {

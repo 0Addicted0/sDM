@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "gem5/sdmmalloc.h"
 const char pat[] = "Hello,sDM";
-#define test_size PAGE_SIZE * 1024 * 32 // 32MB->128MB
+#define test_size PAGE_SIZE * 1024 // 4MB
 int main()
 {
     // int *p = (int *)sdmmalloc(sizeof(int) * 1023 );

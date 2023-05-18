@@ -357,12 +357,25 @@ namespace gem5
 
             // Signal block present to squash prefetch and cache evict packets
             // through express snoop flag
-            BLOCK_CACHED = 0x00010000
+            BLOCK_CACHED = 0x00010000,
+
+            SDM_FLGA = 0x00020000
         };
 
         Flags flags;
 
     public:
+        void setsdmflag(){
+            flags.set(SDM_FLGA);
+        }
+
+        bool checksdmflag(){
+            return flags.isSet(SDM_FLGA);
+        }
+
+        void unsetsdmflag(){
+            flags.clear(SDM_FLGA);
+        }
         typedef MemCmd::Command Command;
 
         /// The command field of the packet.

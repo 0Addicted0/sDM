@@ -448,16 +448,23 @@ AbstractMemory::access(PacketPtr pkt)
         if (pmemAddr) {
             // yqy mark
             // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
-            memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
-            if(pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+            if(pkt->req->hasVaddr() && pkt->req->hasContextId()&&!pkt->checksdmflag())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
             {
-                if(pkt->req->hasVaddr())
-                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                else 
-                {
-                    Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
-                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
-                }
+                memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
+                system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+                pkt->setData(dataCpoy + offset); 
+            }
+            else if(pkt->req->hasPaddr()&&pkt->req->hasContextId()&&(rpTable.count(pkt->getAddr())>0)&&!pkt->checksdmflag()){
+                memcpy(dataCpoy, host_addr - offset, CL_SIZE);
+                Addr vaddr;
+                vaddr = rpTable[pkt->getAddr()];
+                printf("check vaddr %lx\n", vaddr - offset);
+                system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr - offset);
+                pkt->setData(dataCpoy + offset); 
+            }
+            else // 无须检查该packet
+            {
+                pkt->setData(host_addr);
             }
             pkt->setData(dataCpoy + offset); 
         }

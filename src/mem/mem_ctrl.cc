@@ -262,7 +262,9 @@ MemCtrl::addToReadQueue(PacketPtr pkt,
             MemPacket* mem_pkt;
             mem_pkt = mem_intr->decodePacket(pkt, addr, size, true,
                                                     mem_intr->pseudoChannel);
-
+            if(pkt->checksdmflag()){
+                mem_pkt->pkt->unsetsdmflag();
+            }
             // Increment read entries of the rank (dram)
             // Increment count to trigger issue of non-deterministic read (nvm)
             mem_intr->setupRank(mem_pkt->rank, true);
@@ -504,9 +506,45 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
 
     DPRINTF(MemCtrl,
             "processRespondEvent(): Some req has reached its readyTime\n");
-
-    MemPacket* mem_pkt = queue.front();
-
+    // printf("Some req has reached its readyTime,Curtick() %ld,head tick()%ld\n", curTick(),this->eventq->getHead()->when());
+    MemPacket *mem_pkt = queue.front();
+    Packet *pkt = mem_pkt->pkt;
+    bool needCheck = false;
+    Addr vaddr = 0;
+    uint64_t offset = pkt->getAddr() % CL_SIZE;
+    if(!pkt->checksdmflag()){
+        if (pkt->req->hasVaddr())
+        {
+            vaddr = pkt->req->getVaddr();
+        }
+        else{
+            if(rpTable.count(pkt->getAddr())>0)
+            {
+            vaddr = rpTable[pkt->getAddr()];
+            }
+            else{
+            printf("Paddr is not aviliable,vaddr is %lx\n",pkt->getAddr());
+            }
+        }
+        if(pkt->req->hasContextId()){
+            if(system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->isContained(vaddr-offset)!=0)
+            {
+                printf("need check\n");
+                needCheck = true;
+            }
+            if(!needCheck&&curTick()>=254581874250){
+                printf("no need check and vaddr %lx\n",vaddr-offset);
+            }
+        }
+        // else{
+        //     printf("No ContexId \n");
+        // }
+        if(needCheck)
+        {
+            queue.pop_front();
+            // printf("queue.pop_front() advanced size:%ld\n", queue.size());
+        }
+    }
     // media specific checks and functions when read response is complete
     // DRAM only
     mem_intr->respondEvent(mem_pkt->rank);
@@ -530,15 +568,22 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
         accessAndRespond(mem_pkt->pkt, frontendLatency + backendLatency,
                          mem_intr);
     }
+    if(!needCheck)
+    { 
+        queue.pop_front();
+        // printf("queue.pop_front() size:%ld\n", queue.size());
+    }
 
-    queue.pop_front();
-
-    if (!queue.empty()) {
+    if (!queue.empty())
+    {
         assert(queue.front()->readyTime >= curTick());
         assert(!resp_event.scheduled());
         schedule(resp_event, queue.front()->readyTime);
-        sDM::maxTick = std::max(sDM::maxTick, queue.front()->readyTime);// patch
-    } else {
+        // printf("after queue.pop,schedule a resp_event,tick() %ld\n", queue.front()->readyTime);
+        sDM::maxTick = std::max(sDM::maxTick, queue.front()->readyTime); // patch
+    }
+    else
+    {
         // if there is nothing left in any queue, signal a drain
         if (drainState() == DrainState::Draining &&
             !totalWriteQueueSize && !totalReadQueueSize &&
@@ -1026,20 +1071,19 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
                         mem_pkt->qosValue(), mem_pkt->getAddr(), 1,
                         mem_pkt->readyTime - mem_pkt->entryTime);
 
-
             // Insert into response queue. It will be sent back to the
             // requestor at its readyTime
             if (resp_queue.empty()) {
                 assert(!resp_event.scheduled());
+                // printf("resp_event, tick() %ld curTick:%ld\n",mem_pkt->readyTime,curTick());
                 schedule(resp_event, mem_pkt->readyTime);
-                sDM::maxTick = std::max(sDM::maxTick, mem_pkt->readyTime);// patch
+                sDM::maxTick = std::max(sDM::maxTick, mem_pkt->readyTime); // patch
             } else {
+                // printf("pkt addr %ld\n",resp_queue.front()->pkt->getAddr());
                 assert(resp_queue.back()->readyTime <= mem_pkt->readyTime);
                 assert(resp_event.scheduled());
             }
-
             resp_queue.push_back(mem_pkt);
-
             // we have so many writes that we have to transition
             // don't transition if the writeRespQueue is full and
             // there are no other writes that can issue

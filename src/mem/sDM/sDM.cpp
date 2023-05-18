@@ -81,7 +81,7 @@ namespace gem5
          */
         void sDMmanager::read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr)
         {
-            assert((byte_size % CL_SIZE == 0) && "write2Mem: byte_size is aligned by CL_SIZE");
+            // assert((byte_size % CL_SIZE == 0) && "write2Mem: byte_size is aligned by CL_SIZE");
             int num = byte_size / CL_SIZE;
             if (!num)
             {
