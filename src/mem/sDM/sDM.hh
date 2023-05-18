@@ -280,7 +280,25 @@ namespace gem5
                 bool recvTimingResp(PacketPtr pkt)
                 {
                     sdmmanager->pkt_recv = pkt;
-                    sdmmanager->has_recv = 1;
+                    printf("sdm recvTimingresp %lx:\n", pkt->getAddr());
+                    if (pkt->getAddr() == sdmmanager->waitAddr && pkt->isResponse())
+                    {
+                        sdmmanager->has_recv = true;
+                        if (sdmmanager->waitAddr >= 0x20000000000)
+                        {
+                            uint8_t *p = pkt->getPtr<uint8_t>();
+                            printf("sdm recvTimingresp %lx: ", sdmmanager->waitAddr);
+                            for (int i = 0; i < pkt->getSize(); i++)
+                            {
+                                printf("%02x ", *(p + i));
+                            }
+                            printf("\n");
+                        }
+                        else
+                        {
+                            printf("sdm recvTimingresp %lx: %s\n", sdmmanager->waitAddr, pkt->isRead() ? "read" : "write");
+                        }
+                    }
                     return true;
                 }
                 void recvReqRetry()
@@ -290,8 +308,9 @@ namespace gem5
                 }
             };
 
-            bool has_recv = 0;
-            PacketPtr pkt_recv = nullptr;
+            bool has_recv;      // false
+            PacketPtr pkt_recv; // nullptr
+            Addr waitAddr;      //= 0
             sDMPort memPort;
             /**
              * @author psj
@@ -312,7 +331,7 @@ namespace gem5
             MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
-            std::map<Addr, std::pair<size_t, sdmIDtype>>  sdm_paddr2id;
+            std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
             bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
             void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
                                 int skip, int ac_num, int lnpages);
@@ -331,7 +350,7 @@ namespace gem5
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
             bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
-            void write(PacketPtr pkt,uint8_t * aligned_mem_ptr, Addr pktVAddr);
+            void write(PacketPtr pkt, uint8_t *aligned_mem_ptr, Addr pktVAddr);
             void read(PacketPtr pkt, uint8_t *algined_mem_ptr, Addr vaddr);
 
             Port &

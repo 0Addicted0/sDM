@@ -262,9 +262,7 @@ MemCtrl::addToReadQueue(PacketPtr pkt,
             MemPacket* mem_pkt;
             mem_pkt = mem_intr->decodePacket(pkt, addr, size, true,
                                                     mem_intr->pseudoChannel);
-            if(pkt->checksdmflag()){
-                mem_pkt->pkt->unsetsdmflag();
-            }
+
             // Increment read entries of the rank (dram)
             // Increment count to trigger issue of non-deterministic read (nvm)
             mem_intr->setupRank(mem_pkt->rank, true);
@@ -520,20 +518,17 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
         else{
             if(rpTable.count(pkt->getAddr())>0)
             {
-            vaddr = rpTable[pkt->getAddr()];
+                vaddr = rpTable[pkt->getAddr()];
             }
             else{
-            printf("Paddr is not aviliable,vaddr is %lx\n",pkt->getAddr());
+                // printf("Paddr is not aviliable,vaddr is %lx\n",pkt->getAddr());
             }
         }
         if(pkt->req->hasContextId()){
             if(system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->isContained(vaddr-offset)!=0)
             {
-                printf("need check\n");
+                // printf("need check\n");
                 needCheck = true;
-            }
-            if(!needCheck&&curTick()>=254581874250){
-                printf("no need check and vaddr %lx\n",vaddr-offset);
             }
         }
         // else{

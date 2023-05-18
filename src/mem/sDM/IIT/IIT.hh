@@ -102,7 +102,7 @@ namespace gem5
                     for (int i = IIT_MID_ARITY - 1; i >= 0; i--)
                     {
                         scanner = ((midNode[i]) & IIT_MID_NODE_HASH_TAG_MASK) >>
-                                  ((BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB)); // 美妙的左移
+                                  ((BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB));
                         hash_tag = (hash_tag << IIT_MID_NODE_EMB) | scanner;
                     }
                 }
@@ -126,7 +126,6 @@ namespace gem5
                     {
                         scanner = ((leafNode[i]) & IIT_LEAF_NODE_MAJOR_MASK) >>
                                   (BYTE2BIT * sizeof(iit_leaf_minor_counter) - IIT_LEAF_NODE_EMB * 2); // 取出该unit中嵌入的部分位
-                                                                                                       // 美妙的左移
                         major = (major << IIT_LEAF_NODE_EMB) | scanner;                                // 拼接
                     }
                 }
@@ -137,7 +136,6 @@ namespace gem5
                     {
                         scanner = ((midNode[i]) & IIT_MID_NODE_MAJOR_MASK) >>
                                   ((BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB * 2)); // 取出该unit中嵌入的部分位
-                                                                                                       // 美妙的左移
                         major = (major << IIT_MID_NODE_EMB) | scanner;                                 // 拼接
                     }
                 }

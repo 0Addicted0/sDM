@@ -448,25 +448,29 @@ AbstractMemory::access(PacketPtr pkt)
         if (pmemAddr) {
             // yqy mark
             // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
-            if(pkt->req->hasVaddr() && pkt->req->hasContextId()&&!pkt->checksdmflag())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
-            {
-                memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
-                system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                pkt->setData(dataCpoy + offset); 
-            }
-            else if(pkt->req->hasPaddr()&&pkt->req->hasContextId()&&(rpTable.count(pkt->getAddr())>0)&&!pkt->checksdmflag()){
-                memcpy(dataCpoy, host_addr - offset, CL_SIZE);
-                Addr vaddr;
-                vaddr = rpTable[pkt->getAddr()];
-                printf("check vaddr %lx\n", vaddr - offset);
-                system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr - offset);
-                pkt->setData(dataCpoy + offset); 
-            }
-            else // 无须检查该packet
-            {
-                pkt->setData(host_addr);
-            }
+            memcpy(dataCpoy, host_addr - offset, CL_SIZE);// 先取出CL_SIZE对齐的内存数据
+            if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有contextID
+            {// read 函数会将解密后的结果放在dataCpoy中
+                if(pkt->req->hasVaddr())
+                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+                else 
+                {
+                    Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
+                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
+                }  
+                // 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
+            }                                             
             pkt->setData(dataCpoy + offset); 
+            // if(pkt->getAddr()==0x20000001400)
+            // {
+            //     printf("abstrace_mem read: ");
+            //     uint8_t *p = pkt->getPtr<uint8_t>();
+            //     for(int i=0;i<pkt->getSize();i++)
+            //     {
+            //         printf("%02x ",*(p+i));
+            //     }
+            //     printf("\n");
+            // }
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -486,7 +490,7 @@ AbstractMemory::access(PacketPtr pkt)
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
                 assert(pkt->getSize() <= CL_SIZE);
                 memcpy(dataCpoy, host_addr - offset, CL_SIZE);
-                pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());
+                pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());// 这里不会破坏密文,因为write函数中会重新读取所在的半页数据
                 if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
                 {
                     if(pkt->req->hasVaddr())
@@ -499,6 +503,7 @@ AbstractMemory::access(PacketPtr pkt)
                         system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, vaddr);
                     }
                 }
+                // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
                 memcpy(host_addr - offset, dataCpoy, CL_SIZE);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
