@@ -71,11 +71,11 @@ namespace gem5
          * @param paddr2CL CL的物理地址
          * @param key2EncryptionCL 加密密钥指针
          */
-        void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
+        void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr addr2CL, uint8_t *key2EncryptionCL)
         {
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_cipher[SM4_INPUT_SIZE];
-            ConstructOTP(paddr2CL, counter, counterLen, OTP);
+            ConstructOTP(addr2CL, counter, counterLen, OTP);
             memset(otp_cipher, 0, SM4_INPUT_SIZE);
             int rdcnt = CL_SIZE / SM4_INPUT_SIZE;
             for (int i = 0; i < rdcnt; i++)

@@ -92,8 +92,6 @@ SEWorkload::allocPhysPages(int npages, std::vector<int>& pools_id)
             npages = 0;
             break;
         }
-        // else 
-            // printf("exthausted:%d > %ld [%d]\n",npages,memPools.freePages(pool_id),pool_id);
     }
 
     fatal_if(npages > 0,

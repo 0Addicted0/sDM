@@ -331,8 +331,8 @@ namespace gem5
             int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
             bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
-            void write(PacketPtr pkt);
-            void read(PacketPtr pkt, uint8_t *pkt_data_ptr, Addr vaddr);
+            void write(PacketPtr pkt,uint8_t * aligned_mem_ptr, Addr pktVAddr);
+            void read(PacketPtr pkt, uint8_t *algined_mem_ptr, Addr vaddr);
 
             Port &
             getPort(const std::string &if_name, PortID idx = InvalidPortID) override

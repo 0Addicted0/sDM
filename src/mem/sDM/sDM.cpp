@@ -62,6 +62,7 @@ namespace gem5
             has_recv = 0;
             pkt_recv = NULL;
             // 请添加retry pkt
+            sdm_space_cnt = 0;
             printf("sDM.cpp process=%p,sDMmanager=%p,requestorId=%d\n", process, this, _requestorId);
             // std::cout << "!!sDMmanager!!\n"
             //   << "requestorID"
@@ -782,7 +783,7 @@ namespace gem5
          * @attention yqy(debug):处理access中访存粒度小于CL_SIZE的情况
          * @attention pkt 不应该被除检查requestorID外的任何操作使用
          */
-        void sDMmanager::read(PacketPtr pkt, uint8_t *pkt_data_ptr, Addr pkt_vaddr)
+        void sDMmanager::read(PacketPtr pkt, uint8_t *algined_mem_ptr, Addr pkt_vaddr)
         {
             // Addr pktAddr = pkt->getAddr();
             if (pkt->requestorId() == requestorId()) // 不应该检查sDMmanager的请求,但目前无法pass其他process中sDMmanager的请求
@@ -812,34 +813,28 @@ namespace gem5
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
             // 解密Packet中的数据,并修改其中的数据
             // 注意这里解密也暂时先使用了虚拟地址
-            CME::sDM_Decrypt(pkt_data_ptr, (uint8_t *)&cl, sizeof(CL_Counter), pktAddr, cme_key);
+            CME::sDM_Decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), pktAddr, cme_key);
         }
         /**
          * @author yqy
          * @brief 写入paddr的CL时进行校验,并加密、维护iit、计算hmac
-         * @param pkt 截获的每一一个packet
+         * @param pkt 截获的每一个packet
          * @return 是否完成写入
          * @attention 1. X要求gem5的读取的大小与cacheline对齐X -> 函数内部检查(off_in_cl)
          * @attention 2. 假设写队列是安全的,真正写入内存时才进行修改,读取写队列中的数据不需要校验
          * @attention 3. 注意minor计数器溢出引发的重新加密半页数据写回到内存时,不需要检查
+         * @attention 现在使用虚拟地址
          */
         void
-        sDMmanager::write(PacketPtr pkt)
+        sDMmanager::write(PacketPtr pkt, uint8_t *aligned_mem_ptr, Addr pktVAddr)
         {
-            // 现在使用虚拟地址
-            // request.hh
-            // VALID_VADDR = 0x00000004
-            if (pkt->requestorId() == requestorId()) // 不应该检查sDMmanager的请求,但目前无法pass其他process中sDMmanager的请求
+            // 要求给出的缓存行地址必定对齐
+            assert(pktVAddr % CL_SIZE == 0 && "write:packet address isn't aligned with cache line");
+            if (pkt->requestorId() == requestorId()) // 不应该检查来自本身sDMmanager的请求
                 return;
-            Addr pktVAddr;
-            // 这个assert转移到上层函数abstract_mem.cc的access函数中检查
-            // if (!pkt->req->getFlags().isSet(0x00000004)) // 该请求一定不来自程序本身
-            //     return;
-            pktVAddr = pkt->req->getVaddr();
             sdmIDtype id = isContained(pktVAddr);
             if (!id) // 无需修改任何数据包
                 return;
-            // assert((pkt->getSize() == CL_SIZE) && "write:packet size isn't aligned with cache line");
             Addr rva; // 该地址在所属空间中的相对偏移
             int h;
             Addr keyPathAddr[MAX_HEIGHT] = {0};
@@ -874,8 +869,10 @@ namespace gem5
                     CME::sDM_Decrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
                                      hPageAddr + i * CL_SIZE, cme_key);
                 }
-                memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize()); // debug pkt可能不按CL_SIZE对齐
-                for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)                                  // 使用新的counter加密
+                // 更新为写入后的数据,debug:pkt可能不按CL_SIZE对齐
+                memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize());
+                // 使用新的counter加密
+                for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)
                 {
                     keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, i, cl);
                     CME::sDM_Encrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
@@ -883,20 +880,31 @@ namespace gem5
                     // 将重新加密好的cacheLine写回到内存
                     const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(pktVAddr & PAGE_ALIGN_MASK);
                     assert(entry != NULL);
-                    write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, entry->paddr + i * CL_SIZE);
+                    if (hPageAddr + i * CL_SIZE == pktVAddr) // 是本次写操作的地址则直接放在aligned_mem_ptr
+                        memcpy(aligned_mem_ptr, hpg_data + i * CL_SIZE, CL_SIZE);
+                    else // 否则需要发起新的写请求
+                        write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, entry->paddr + i * CL_SIZE);
                 }
             }
             else
             {
-                keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl);
-                CME::sDM_Encrypt(pkt->getPtr<uint8_t>(), (uint8_t *)&cl, sizeof(CL_Counter),
+                bkeyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl); // 取得该cl的旧counter
+                // 解密对应缓存行
+                CME::sDM_Decrypt(hpg_data + off * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
                                  hPageAddr + off * CL_SIZE, cme_key);
+                //  更新写入的数据部分,debug:pkt可能不按CL_SIZE对齐
+                memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize());
+                //  取得新的counter
+                keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl);
+                // 重新加密
+                CME::sDM_Encrypt(hpg_data + off * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
+                                 pktVAddr, cme_key);
                 // 将重新加密好的cacheLine写回到内存
-                auto entry = process->pTable->lookup(pktVAddr & PAGE_ALIGN_MASK);
-                assert(entry != NULL);
-                write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, entry->paddr + off * CL_SIZE);
-                // 保持hpg_data的最新性,加密性,下面计算hmac会使用该数组
-                memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize()); // debug pkt可能不按CL_SIZE对齐
+                // auto entry = process->pTable->lookup(pktVAddr & PAGE_ALIGN_MASK);
+                // assert(entry != NULL);
+                // debug 写入到aligned_mem_ptr即可
+                memcpy(aligned_mem_ptr, hpg_data + off * CL_SIZE, CL_SIZE);
+                // write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, entry->paddr + off * CL_SIZE);
             }
             // 2. 重新计算HMAC并写入到远端内存
             uint8_t hmac[CL_SIZE >> 1];

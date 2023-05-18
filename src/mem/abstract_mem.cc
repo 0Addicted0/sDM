@@ -448,33 +448,18 @@ AbstractMemory::access(PacketPtr pkt)
         if (pmemAddr) {
             // yqy mark
             // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
-            if(pkt->req->hasVaddr() && pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+            memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
+            if(pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
             {
-                memcpy(dataCpoy, host_addr - offset, CL_SIZE);   
-                // system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                pkt->setData(dataCpoy + offset); 
+                if(pkt->req->hasVaddr())
+                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+                else 
+                {
+                    Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
+                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
+                }
             }
-            else // 无须检查该packet
-            {
-                pkt->setData(host_addr);
-            }
-            // yqy test
-            // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
-            // printf(" read[%lx]\n",pkt->req->getVaddr());
-            // if (!pkt->req->hasVaddr())
-            // {
-            //     printf("[%ld]abstract_mem access %lx[%ld] (READ)\n", curTick(), pkt->getAddr(), pkt->getSize());
-            // }
-            // if(pkt->getAddr()==0x1e73a2)
-            // {
-            //     printf("read[0x1e73a2]%ld\n",pkt->getSize());
-            // }
-            // if (!pkt->req->hasVaddr() && (pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
-            // {
-            //     printf("[%ld]abstract_mem access %s(READ)", curTick(), pkt->print().c_str());
-            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
-            // }
-
+            pkt->setData(dataCpoy + offset); 
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -492,33 +477,22 @@ AbstractMemory::access(PacketPtr pkt)
             if (pmemAddr) {
                 // yqy mark
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
-                if(pkt->req->hasVaddr() && pkt->req->hasContextId())// 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+                assert(pkt->getSize() <= CL_SIZE);
+                memcpy(dataCpoy, host_addr - offset, CL_SIZE);
+                pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());
+                if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
                 {
-                    // sDM::write(pkt);
-                    // system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt);
-
-                    pkt->writeData(host_addr);// 开启调试sDMmanager->write(pkt)时请注释此行
+                    if(pkt->req->hasVaddr())
+                    {
+                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->getAddr() - offset);
+                    }
+                    else 
+                    {
+                        Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
+                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, vaddr);
+                    }
                 }
-                else // 无须检查该packet
-                {
-                    pkt->writeData(host_addr);
-                }
-                // yqy test
-                // printf("[%ld]abstract_mem access %s",curTick(),pkt->print().c_str());
-                // printf(" write[%lx]\n",pkt->req->getVaddr());
-                // if (!pkt->req->hasVaddr())
-                // {
-                //     printf("[%ld]abstract_mem access %lx[%ld] (WRITE)\n", curTick(), pkt->getAddr(),pkt->getSize());
-                // }
-                // if(pkt->getAddr()==0x1e73a2)
-                // {
-                //     printf("write[0x1e73a2]%ld\n",pkt->getSize());
-                // }
-                // if (!pkt->req->hasVaddr() && (pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
-                // {
-                //     printf("[%ld]abstract_mem access %s(WRITE)", curTick(), pkt->print().c_str());
-                //     // printf(" write[%lx]\n", pkt->req->getVaddr());
-                // }
+                memcpy(host_addr - offset, dataCpoy, CL_SIZE);
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }

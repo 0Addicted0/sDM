@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "gem5/sdmmalloc.h"
 const char pat[] = "Hello,sDM";
-#define test_size PAGE_SIZE * 1024 * 32 // 32MB
+#define test_size PAGE_SIZE * 1024 * 32 // 32MB->128MB
 int main()
 {
     // int *p = (int *)sdmmalloc(sizeof(int) * 1023 );
@@ -12,7 +12,7 @@ int main()
     for (int i = 0; i < test_size; i += CL_SIZE)
         for (int j = 0; j < 9; j++)
             p[i + j] = pat[j];
-    printf("mytest:%x\n", p[0]); // 越界
+    printf("mytest:%x\n", p[0]); // 越界:4096->0
     sdmfree(p);
     return 0;
 }
