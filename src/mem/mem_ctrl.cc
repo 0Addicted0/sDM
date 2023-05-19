@@ -37,8 +37,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "mem/sDM/sDM_def.hh"
-
+#include "mem/sDM/sDMdef.hh"
 #include "mem/mem_ctrl.hh"
 
 #include "base/trace.hh"
@@ -510,7 +509,7 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
     bool needCheck = false;
     Addr vaddr = 0;
     uint64_t offset = pkt->getAddr() % CL_SIZE;
-    if(!pkt->checksdmflag()){
+    if(!pkt->checksDMflag()){
         if (pkt->req->hasVaddr())
         {
             vaddr = pkt->req->getVaddr();
@@ -698,6 +697,7 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
         // queue the packet in the response queue to be sent out after
         // the static latency has passed
         port.schedTimingResp(pkt, response_time);
+        sDM::maxTick = std::max(sDM::maxTick, response_time);
     } else {
         // @todo the packet is going to be deleted, and the MemPacket
         // is still having a pointer to it

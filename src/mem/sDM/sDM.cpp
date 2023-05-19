@@ -1,7 +1,7 @@
 #include "sDM.hh"
-
-#include <algorithm>
-
+#include "sDMdef.hh"
+#include "sDMglb.hh"
+extern std::vector<gem5::memory::AbstractMemory *> sDMdrams;
 namespace gem5
 {
     std::unordered_map<uint64_t, uint64_t> rpTable;
@@ -22,8 +22,9 @@ namespace gem5
          * @author yqy
          * @brief dump page data
          */
-        void sDMdump(uint8_t *tptr, size_t sz = PAGE_SIZE)
+        void sDMdump(char *title,uint8_t *tptr, size_t sz = PAGE_SIZE)
         {
+            printf("%s:\n", title);
             uint64_t *ptr = (uint64_t *)tptr;
             for (size_t i = 0; i < sz / 8; i++)
             {
@@ -97,7 +98,7 @@ namespace gem5
             int num = byte_size / CL_SIZE;
             if (!num)
             {
-                printf("req size (%d) < CL_SIZE\n", byte_size);
+                // printf("req size (%d) < CL_SIZE\n", byte_size);
                 read4gem5(byte_size, container, gem5_addr);
             }
             for (int i = 0; i < num; i++)
@@ -116,20 +117,28 @@ namespace gem5
             RequestPtr req = std::make_shared<Request>(gem5_addr, byte_size, 0, _requestorId);
             PacketPtr pkt = Packet::createRead(req);
             pkt->dataDynamic(new uint8_t[byte_size]);
-            // bool res = memPort.sendTimingReq(pkt);
+            pkt->setsDMflag();
             maxTick = 0;
             waitAddr = gem5_addr;
             has_recv = false;
             memPort.sendTimingReq(pkt);
             // mem_ctrl发回响应packet时会自动调用recvTimingResp的函数，设置两个全局变量has_recv和pkt_recv
             // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
-            while (!has_recv)
+
+            // while (!has_recv)
+            // {
+            //     if (waitAddr >= 0x20000000000)
+            //         printf("waiting...");
+            // };
+
+            // pkt->writeDataToBlock(container, byte_size);
+            if(sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
+                memcpy(container, sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), byte_size);
+            else 
             {
-                // ...
-            };
-            // printf("recv!!!\n");
-            pkt_recv->writeDataToBlock(container, byte_size);
-            // memcpy(container, pkt_recv->getPtr<uint8_t>(), byte_size);
+                assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
+                memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
+            }
             has_recv = false;
             waitAddr = 0;
             // delete pkt;
@@ -153,7 +162,7 @@ namespace gem5
             // ys debug 设置flag
             pkt->allocate();
             pkt->setData((const uint8_t *)data);
-            // pkt->set_sdmflag();
+            pkt->setsDMflag();
             maxTick = 0;
             memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
             // printf("write2mem over \n");
@@ -259,16 +268,16 @@ namespace gem5
          */
         Addr sDMmanager::find(Addr head, Addr offset, int skip, int known, int &pnum)
         {
-            printf("in sdm find head=0x%lx off=0x%lx known=%d\n", head, offset, known);
+            // printf("[%ld]in sdm find head=0x%lx off=0x%lx known=%d\n", curTick(), head, offset, known);
             local_jmp rbound;
             sdm_pagePtrPairPtr rboundp = (sdm_pagePtrPair *)&rbound; // 这里两个结构体大小相同,因此可以共用一下
             bool flag = false;                                       // rbound是否已经通过内存得到
             if (!known)                                              // 首次进入不确定是否在该连续段中
             {
-                printf("in sdm find: known=0\n");
+                // printf("[%ld]in sdm find: known=0\n", curTick());
                 // 获取最后一个连续页的最后一个数据对的范围
                 read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
-                printf("in find read [%lx:%lx] rbound.con=%ld maxBound=0x%lx\n", head + PAGE_SIZE - sizeof(local_jmp), head + PAGE_SIZE, rbound.con, rbound.maxBound);
+                // printf("[%ld]in find read [%lx:%lx] rbound.con=%ld maxBound=0x%lx\n", curTick(), head + PAGE_SIZE - sizeof(local_jmp), head + PAGE_SIZE, rbound.con, rbound.maxBound);
                 flag = true;
                 if ((rbound.maxBound) >= offset)
                     known = 1;
@@ -277,7 +286,7 @@ namespace gem5
             }
             if (known == 1) // 在连续页的范围内
             {
-                printf("in sdm find: known=1\n");
+                // printf("[%ld]in sdm find: known=1\n", curTick());
                 if (!flag)
                     read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
                 // 在当前连续段内二分找出地址所在页
@@ -296,7 +305,7 @@ namespace gem5
                 }
                 // 在第r页内二分出数据对
                 head += r * PAGE_SIZE;
-                printf("r=%d\n", r);
+                // printf("[%ld]r=%d\n", curTick(), r);
                 //  [skip/2,...,PAGE_SIZE/PAIR_SIZE-1]
                 // ^                                  ^
                 // i                                  j
@@ -312,8 +321,8 @@ namespace gem5
                 {
                     int mid = (r + l) >> 1;
                     read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (mid * PAIR_SIZE));
-                    printf("in find read [%lx:%lx] ", head + (mid * PAIR_SIZE), head + (mid * PAIR_SIZE) + PAIR_SIZE);
-                    printf("rboundp.curAddr=0x%lx rboundp.cnum=%d rboundp.pnum=%d\n", rboundp->curPageAddr, rboundp->cnum, rboundp->pnum);
+                    // printf("[%ld]in find read [%lx:%lx] ", curTick(), head + (mid * PAIR_SIZE), head + (mid * PAIR_SIZE) + PAIR_SIZE);
+                    // printf("rboundp.curAddr=0x%lx rboundp.cnum=%d rboundp.pnum=%d\n", rboundp->curPageAddr, rboundp->cnum, rboundp->pnum);
                     if ((rboundp->pnum + rboundp->cnum) * PAGE_SIZE > offset || // debug >= -> >
                         (rboundp->cnum = -1 && rboundp->cnum == rboundp->pnum)) // 0xffffffffffffffff
                         r = mid;
@@ -323,14 +332,14 @@ namespace gem5
                 // 在第r个数据对中
                 // 在数据对中找到所在页
                 head = rboundp->curPageAddr;
-                printf("ret=0x%lx pnum=%d\n", head, pnum);
+                // printf("[%ld]ret=0x%lx pnum=%d\n", curTick(), head, pnum);
                 head += (offset - rboundp->pnum) / PAGE_SIZE;
                 pnum = rboundp->pnum + (offset - rboundp->pnum) / PAGE_SIZE;
                 return head;
             }
             else
             {
-                printf("in sdm find: known=2\n");
+                // printf("[%ld]in sdm find: known=2\n", curTick());
                 // 本地跳跃页查找
                 // 注意这里应该是找到一个连续段最大地址范围对小于等于offset的skip
                 skip_jmp jmps[skip];
@@ -387,9 +396,9 @@ namespace gem5
         {
             skip = 1;
             // 这里实现skip list,需要根据pair_num的数量申请本地内存
-            if (pair_num >= 8 * (PAGE_SIZE / PAIR_SIZE - 1) - skip)
+            if (pair_num >= 8 * ((PAGE_SIZE / PAIR_SIZE - 1) - 3))
                 skip = 3; // 构建3级 step=1,2,4
-            else if (pair_num >= 4 * ((PAGE_SIZE / PAIR_SIZE - 1) - skip))
+            else if (pair_num >= 4 * (((PAGE_SIZE / PAIR_SIZE - 1) - 2)))
                 skip = 2; // 构建4级 step=1,2
             else
                 skip = 1; // 构建1级 step=1
@@ -501,7 +510,7 @@ namespace gem5
             printf("local_phy_list_size = %ld , remote_phy_list_size = %ld skip = %d\n", local_phy_list.size(), remote_phy_list.size(), skip);
             for (int i = 0; i < local_phy_list.size(); i++)
             {
-                printf("---in build_SkipList local_phy[%d]0x%lx---\n", i, local_phy_list[i].start);
+                // printf("---in build_SkipList local_phy[%d]0x%lx---\n", i, local_phy_list[i].start);
                 // sDMdump((uint8_t *)&mem[i]);
                 write2Mem(PAGE_SIZE, (uint8_t *)&mem[i], local_phy_list[i].start);
             }
@@ -515,7 +524,6 @@ namespace gem5
          * @param {sdm_hashKey} hkey
          * @param {vector<phy_space_block>} r_hmac_phy_list 远端存放hmac的物理地址
          * @param {vector<phy_space_block>} r_iit_phy_list 远端存放iit的物理地址
-         * @return {*}
          */
         void sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey,
                                        std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list)
@@ -532,19 +540,14 @@ namespace gem5
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
-                Addr hpageAddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
-                uint64_t offset = (paddr - hpageAddr) / CL_SIZE;
-                CME::sDM_Encrypt(buf, cl, sizeof(cl), hpageAddr + offset * CL_SIZE, ckey); // 加密数据
-
-                write2Mem(CL_SIZE, buf, paddr); // 写回内存
-                // printf("[%ld] %d addr:%lx\n", curTick(),i, paddr);
+                CME::sDM_Encrypt(buf, cl, sizeof(cl), paddr, ckey); // 加密数据
+                write2Mem(CL_SIZE, buf, paddr);                     // 写回内存
                 addr += CL_SIZE;
             }
             printf("[%ld] sdm_init CME done\n", curTick());
             addr = vaddr;
 
             // 计算HMAC
-            // sdm_size hmac_size = byte_size / SDM_HMAC_ZOOM; // debug(unused)? yqy
             int hmacpageindx = 0; // 存hmac的物理页面列表的索引
             auto block = r_hmac_phy_list[hmacpageindx++];
             Addr hmacpageAddrstart = block.start;                          // 存放hmac的起始物理地址(远端)
@@ -552,7 +555,7 @@ namespace gem5
             uint8_t hmac[SM3_SIZE * 2];
             for (int i = 0; i < byte_size / (PAGE_SIZE >> 1); i++)
             {
-                Addr hpageAddr = (addr & PAGE_ALIGN_MASK) + (addr & (PAGE_SIZE >> 1)); // 加密使用的缓存行地址
+                // Addr hpageAddr = (addr & PAGE_ALIGN_MASK) + (addr & (PAGE_SIZE >> 1)); // 加密使用的缓存行地址 unused
                 uint8_t dataptr[PAGE_SIZE >> 1];                                       // 用虚拟地址
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
@@ -560,7 +563,7 @@ namespace gem5
                 read4Mem(PAGE_SIZE >> 1, dataptr, paddr); // 被加密的数据
                 iit_NodePtr counter = new iit_Node();     // new 会将结构体内部置0
 
-                CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, hpageAddr, (uint8_t *)counter,
+                CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, paddr, (uint8_t *)counter,
                               sizeof(iit_Node), hmac + (i & 1) * SM3_SIZE, SM3_SIZE); // 计算hash值，存入hmac
                 if (hmacpageAddrstart < hmacpageAddrend)
                 {
@@ -579,7 +582,7 @@ namespace gem5
                     write2Mem(SM3_SIZE * 2, hmac, hmacpageAddrstart - SM3_SIZE * 2);
                 }
             }
-            printf("in sdm_init hmac done\n");
+            printf("[%ld]in sdm_init hmac done\n", curTick());
             // 构建iit
             uint64_t leaf_num = byte_size / (IIT_LEAF_ARITY * CL_SIZE);
             uint64_t iitpPageindex = 0;
@@ -592,7 +595,7 @@ namespace gem5
                 uint64_t curlayernodenum = leaf_num; // 当前层结点
                 int i = 0;                           // 计算缓存行索引
                 Addr hpageAddr =
-                    (curpPageAddrstart & PAGE_ALIGN_MASK) + (curpPageAddrend & (PAGE_SIZE >> 1)); // 所在半页地址
+                    (curpPageAddrstart & PAGE_ALIGN_MASK) + (curpPageAddrstart & (PAGE_SIZE >> 1)); // 所在半页地址
                 while (curlayernodenum > 0)
                 {
                     i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
@@ -630,7 +633,7 @@ namespace gem5
                 leaf = false;
                 leaf_num /= IIT_MID_ARITY; // 下一层的结点数
             }
-            printf("in sdm_init iit done\n");
+            printf("[%ld]in sdm_init iit done\n", curTick());
             return;
         }
         /**
@@ -729,15 +732,15 @@ namespace gem5
          * @author yqy
          * @brief 计算HMAC(所在半页)
          * @param sdata 加密后的内存数据指针
-         * @param data_vaddr 所在半页的物理地址指针
+         * @param hpaddr 所在半页的物理地址
          * @param counter 所在半页对应的计数器(节点)指针
          * @param hash_key 所属sdm的hash密钥
          * @param hmac 返回计算得到的hmac指针
          * @attention 最终返回的HMAC长度为32Byte
          */
-        void hmac_get(uint8_t *sdata, Addr data_vaddr, iit_NodePtr counter, sdm_hashKey hash_key, uint8_t *hmac)
+        void hmac_get(uint8_t *sdata, Addr hpaddr, iit_NodePtr counter, sdm_hashKey hash_key, uint8_t *hmac)
         {
-            CME::sDM_HMAC(sdata, PAGE_SIZE >> 1, hash_key, data_vaddr, (uint8_t *)counter, sizeof(iit_Node), hmac, SM3_SIZE);
+            CME::sDM_HMAC(sdata, PAGE_SIZE >> 1, hash_key, hpaddr, (uint8_t *)counter, sizeof(iit_Node), hmac, SM3_SIZE);
         }
         /**
          * @author yqy
@@ -760,16 +763,19 @@ namespace gem5
             // 读取所在半页的内存数据
             read4Mem(PAGE_SIZE >> 1, hpg_data, pageAddr);
             // 计算HMAC
-            hmac_get(hpg_data, dataVAddr, counters, hash_key, calc_hmac);
+            hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
             // 与存储值比较
             int pnum = 0;
-            printf("rva=%lx\n", rva);
+            // printf("rva=%lx\n", rva);
             rva /= SDM_HMAC_ZOOM;
-            printf("rva=%lx\n", rva);
+            // printf("rva=%lx\n", rva);
             *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, rva, sdm_table[id].hmac_skip, 0, pnum);
             sdm_HMAC stored_hmac;
             // 从本地内存中读取
+            printf("in hmac_verify\n");
             read4Mem(sizeof(sdm_HMAC), stored_hmac, *hmacAddr);
+            sDMdump((char*)"old hmac", stored_hmac, sizeof(sdm_HMAC));
+            sDMdump((char*)"get hmac", calc_hmac, sizeof(sdm_HMAC));
             assert(memcmp(calc_hmac, stored_hmac, sizeof(sdm_HMAC)) == 0 && "HMAC verify failed");
             return true;
         }
@@ -839,8 +845,7 @@ namespace gem5
             // Addr pktAddr = pkt->getAddr();
             if (pkt->requestorId() == requestorId()) // 不应该检查sDMmanager的请求,但目前无法pass其他process中sDMmanager的请求
                 return;
-            Addr pktAddr;
-            pktAddr = pkt_vaddr;
+            Addr pktAddr = pkt_vaddr;
             sdmIDtype id = sDMmanager::isContained(pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
@@ -865,7 +870,11 @@ namespace gem5
             sdm_table[id].key_get(CME_KEY_TYPE, cme_key);
             // 解密Packet中的数据,并修改其中的数据
             // 注意这里解密也暂时先使用了虚拟地址
-            CME::sDM_Decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), pktAddr, cme_key);
+            Addr paddr;
+            const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(pktAddr);
+            assert(entry && "paddr is valid");
+            paddr = entry->paddr + (pktAddr & (~PAGE_ALIGN_MASK));
+            CME::sDM_Decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key);
         }
         /**
          * @author yqy
@@ -882,7 +891,7 @@ namespace gem5
         {
             // 要求给出的缓存行地址必定对齐
             assert(pktVAddr % CL_SIZE == 0 && "write:packet address isn't aligned with cache line");
-            if (pkt->requestorId() == requestorId()) // 不应该检查来自本身sDMmanager的请求
+            if (pkt->requestorId() == requestorId() || pkt->checksDMflag()) // 不应该检查来自任何sDMmanager的请求
                 return;
             sdmIDtype id = isContained(pktVAddr);
             if (!id) // 无需修改任何数据包
@@ -912,30 +921,32 @@ namespace gem5
             CL_Counter cl;
             int off = (pktVAddr - hPageAddr) / CL_SIZE;   // 对应所在半页中的第几个计数器/缓存行
             uint8_t off_in_cl = pkt->getAddr() % CL_SIZE; // 对应缓存行中的偏移
-            if (OF)                                       // 引发重加密所在半页
+            const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(hPageAddr);
+            assert(entry && "paddr is valid");
+            Addr hpaddr = entry->paddr + (hPageAddr & (PAGE_SIZE >> 1));
+            Addr clpaddr = entry->paddr + (pktVAddr & (~PAGE_ALIGN_MASK));
+            if (OF) // 引发重加密所在半页
             {
                 // 可以提前取得所在半页的数据(已在hpg_data中取得),其后的HMAC计算是必须的,提高并行度
                 for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++) // 先解密得到原数据
                 {
                     bkeyPathNode[0].getCounter_k(IIT_LEAF_TYPE, i, cl); // 取得该cl的旧counter
                     CME::sDM_Decrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
-                                     hPageAddr + i * CL_SIZE, cme_key);
+                                     hpaddr + i * CL_SIZE, cme_key);
                 }
-                // 更新为写入后的数据,debug:pkt可能不按CL_SIZE对齐
+                // 更新为写入后的数据
                 memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize());
                 // 使用新的counter加密
                 for (int i = 0; i < (PAGE_SIZE >> 1) / CL_SIZE; i++)
                 {
                     keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, i, cl);
                     CME::sDM_Encrypt(hpg_data + i * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
-                                     hPageAddr + i * CL_SIZE, cme_key);
+                                     hpaddr + i * CL_SIZE, cme_key);
                     // 将重新加密好的cacheLine写回到内存
-                    const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(pktVAddr & PAGE_ALIGN_MASK);
-                    assert(entry != NULL);
-                    if (hPageAddr + i * CL_SIZE == pktVAddr) // 是本次写操作的地址则直接放在aligned_mem_ptr
+                    if (hpaddr + i * CL_SIZE == clpaddr) // 是本次写操作的地址则直接放在aligned_mem_ptr
                         memcpy(aligned_mem_ptr, hpg_data + i * CL_SIZE, CL_SIZE);
                     else // 否则需要发起新的写请求
-                        write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, entry->paddr + i * CL_SIZE);
+                        write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, hpaddr + i * CL_SIZE);
                 }
             }
             else
@@ -943,24 +954,22 @@ namespace gem5
                 bkeyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl); // 取得该cl的旧counter
                 // 解密对应缓存行
                 CME::sDM_Decrypt(hpg_data + off * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
-                                 hPageAddr + off * CL_SIZE, cme_key);
+                                 hpaddr + off * CL_SIZE, cme_key);
                 //  更新写入的数据部分,debug:pkt可能不按CL_SIZE对齐
                 memcpy(hpg_data + off * CL_SIZE + off_in_cl, pkt->getPtr<uint8_t>(), pkt->getSize());
                 //  取得新的counter
                 keyPathNode[0].getCounter_k(IIT_LEAF_TYPE, off, cl);
                 // 重新加密
                 CME::sDM_Encrypt(hpg_data + off * CL_SIZE, (uint8_t *)&cl, sizeof(CL_Counter),
-                                 pktVAddr, cme_key);
+                                 clpaddr, cme_key);
                 // 将重新加密好的cacheLine写回到内存
-                // auto entry = process->pTable->lookup(pktVAddr & PAGE_ALIGN_MASK);
-                // assert(entry != NULL);
-                // debug 写入到aligned_mem_ptr即可
+                // debug:已经在abstract_mem中对齐，现在写入到aligned_mem_ptr即可
                 memcpy(aligned_mem_ptr, hpg_data + off * CL_SIZE, CL_SIZE);
                 // write2Mem(CL_SIZE, hpg_data + off * CL_SIZE, entry->paddr + off * CL_SIZE);
             }
             // 2. 重新计算HMAC并写入到远端内存
             uint8_t hmac[CL_SIZE >> 1];
-            hmac_get(hpg_data, hPageAddr, keyPathNode, hash_key, hmac);
+            hmac_get(hpg_data, hpaddr, keyPathNode, hash_key, hmac);
             write2Mem(CL_SIZE >> 1, hmac, hmacAddr);
             // 3. 修改iit tree并写回
             for (int i = 1; i < h; i++)

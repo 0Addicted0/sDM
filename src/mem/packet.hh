@@ -365,15 +365,15 @@ namespace gem5
         Flags flags;
 
     public:
-        void setsdmflag(){
+        void setsDMflag(){
             flags.set(SDM_FLGA);
         }
 
-        bool checksdmflag(){
+        bool checksDMflag(){
             return flags.isSet(SDM_FLGA);
         }
 
-        void unsetsdmflag(){
+        void unsetsDMflag(){
             flags.clear(SDM_FLGA);
         }
         typedef MemCmd::Command Command;

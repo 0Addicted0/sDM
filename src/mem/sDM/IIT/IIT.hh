@@ -1,6 +1,6 @@
 #ifndef _IIT_HH_
 #define _IIT_HH_
-#include "../sDM_def.hh"
+#include "../sDMdef.hh"
 #include "../CME/CME.hh"
 
 #include <cassert>

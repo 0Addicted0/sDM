@@ -1,7 +1,7 @@
 #ifndef _CME_HH_
 #define _CME_HH_
 
-#include "../sDM_def.hh"
+#include "../sDMdef.hh"
 #include "../alg_src/sm4/SM4_ENC.hh"
 #include "../alg_src/sm3/SM3.hh"
 

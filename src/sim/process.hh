@@ -36,6 +36,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "mem/sDM/sDM.hh"
 
 #include "base/loader/memory_image.hh"
 #include "base/statistics.hh"
@@ -45,7 +46,6 @@
 #include "sim/fd_entry.hh"
 #include "sim/mem_state.hh"
 #include "sim/sim_object.hh"
-#include "mem/sDM/sDM.hh"
 
 namespace gem5
 {

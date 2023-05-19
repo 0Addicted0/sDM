@@ -1,7 +1,9 @@
-#ifndef _SDM_DEF_HH_
-#define _SDM_DEF_HH_
+#ifndef _SDMDEF_HH_
+#define _SDMDEF_HH_
+
 #include <stdint.h>
 #include <unordered_map>
+#include <algorithm>
 
 #define BYTE2BIT 8
 
@@ -51,4 +53,4 @@ namespace gem5
         typedef uint64_t Addr; // 64位地址类型
     }
 }
-#endif // _SDM_DEF_HH_
+#endif // _SDMDEF_HH_

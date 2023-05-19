@@ -38,7 +38,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "mem/sDM/sDM_def.hh"
+#include "mem/sDM/sDMdef.hh"
 #include "base/bitfield.hh"
 #include "base/intmath.hh"
 #include "base/types.hh"

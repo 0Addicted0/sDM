@@ -37,6 +37,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "mem/sDM/sDMglb.hh"
 
 #include "mem/abstract_mem.hh"
 
@@ -49,6 +50,8 @@
 #include "debug/MemoryAccess.hh"
 #include "mem/packet_access.hh"
 #include "sim/system.hh"
+
+std::vector<gem5::memory::AbstractMemory *> sDMdrams;
 
 namespace gem5
 {
@@ -69,6 +72,7 @@ AbstractMemory::AbstractMemory(const Params &p) :
              "Memory range %s must be valid with non-zero size.",
              range.to_string());
     //  yqy mark
+    sDMdrams.push_back(this);
     printf("AbstractMemory %s constructed!!\n",range.to_string().c_str());
 }
 
@@ -453,22 +457,20 @@ AbstractMemory::access(PacketPtr pkt)
             {// read 函数会将解密后的结果放在dataCpoy中
                 if(pkt->req->hasVaddr())
                     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                else 
+                else if(rpTable.count(pkt->getAddr() - offset))
                 {
                     Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
                     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
                 }  
                 // 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
-            }                                             
-            pkt->setData(dataCpoy + offset); 
-            // if(pkt->getAddr()==0x20000001400)
+            }
+            pkt->setData(dataCpoy + offset);
+            // if(pkt->getAddr() >= 0x20000000000)
             // {
-            //     printf("abstrace_mem read: ");
+            //     printf("[%ld]abstrace_mem read[%lx:%lx]", curTick(), pkt->getAddr(), pkt->getAddr() + pkt->getSize() - 1);
             //     uint8_t *p = pkt->getPtr<uint8_t>();
-            //     for(int i=0;i<pkt->getSize();i++)
-            //     {
-            //         printf("%02x ",*(p+i));
-            //     }
+            //     for (int i = 0; i < pkt->getSize(); i++)
+            //         printf("%02x ", *(p + i));
             //     printf("\n");
             // }
         }

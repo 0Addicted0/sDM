@@ -37,6 +37,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "mem/sDM/sDMdef.hh"
 
 #include "mem/packet_queue.hh"
 
@@ -149,6 +150,7 @@ PacketQueue::schedSendTiming(PacketPtr pkt, Tick when)
     // before every other packet
     transmitList.emplace_front(when, pkt);
     schedSendEvent(when);
+    // sDM::maxTick = std::max(sDM::maxTick, when);
 }
 
 void
@@ -173,6 +175,7 @@ PacketQueue::schedSendEvent(Tick when)
             // if the new time is earlier than when the event
             // currently is scheduled, move it forward
             em.reschedule(&sendEvent, when);
+            // sDM::maxTick = std::max(sDM::maxTick, when);
         }
     } else {
         // we get a MaxTick when there is no more to send, so if we're

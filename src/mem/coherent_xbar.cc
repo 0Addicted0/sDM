@@ -43,7 +43,7 @@
  * Definition of a crossbar object.
  */
 
-#include "mem/sDM/sDM_def.hh"
+#include "mem/sDM/sDMdef.hh"
 
 #include "mem/coherent_xbar.hh"
 
@@ -383,6 +383,10 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 //     printf("before serviceOne ");
                 //     this->eventq->dump();
                 // }
+                // if(pkt->getAddr()>=0x20000000000)
+                // {
+                //     printf("[%ld]in conherent_xbar [maxTick=%ld] %s\n", curTick(), sDM::maxTick,pkt->print().c_str());
+                // }
                 while(h && h->when() <= sDM::maxTick)
                 {
                     // printf("when=%ld , maxTick=%ld\n", h->when(), sDM::maxTick);
@@ -390,14 +394,14 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                     h = this->eventq->getHead();
                 }
                 // 在processNextReqEvent函数中会存在重新添加req到evenq的情况:刷新请求与req冲突
-                // if(curTick()>=7279575000000)
+                // if(pkt->isRead() && pkt->getAddr()>=0x20000000000)
                 // {
-                    // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
-                    // this->eventq->serviceOne();// psj
-                    // printf("(maxTick=%ld)after serviceOne\n",sDM::maxTick);
-                    // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
-                    // this->eventq->dump();
-                    // printf("\n\n");
+                //     // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
+                //     // this->eventq->serviceOne();// psj
+                //     printf("(maxTick=%ld)after serviceOne\n",sDM::maxTick);
+                //     // printf("%s %ld\n",this->eventq->getHead()->name().c_str(),this->eventq->getHead()->when());
+                //     this->eventq->dump();
+                //     printf("\n\n");
                 // }
                 this->eventq->lock();
             }
@@ -543,11 +547,18 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     pkt->headerDelay = 0;
     cpuSidePorts[cpu_side_port_id]->schedTimingResp(pkt, curTick()
                                         + latency);
-
     // remove the request from the routing table
     routeTo.erase(route_lookup);
 
     respLayers[cpu_side_port_id]->succeededTiming(packetFinishTime);
+
+    if(pkt->requestorId() == 10)
+    {
+        // Tick tmp = std::max(packetFinishTime);
+        this->eventq->unlock();
+        this->eventq->serviceEvents(std::max(packetFinishTime, curTick() + latency));
+        this->eventq->lock();
+    }
 
     // stats updates
     pktCount[cpu_side_port_id][mem_side_port_id]++;

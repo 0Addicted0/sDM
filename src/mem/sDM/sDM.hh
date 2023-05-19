@@ -15,7 +15,7 @@
 #ifndef _SDM_HH_
 #define _SDM_HH_
 
-#include "sDM_def.hh"
+#include "sDMdef.hh"
 #include "./IIT/IIT.hh"
 #include "CME/CME.hh"
 
@@ -280,30 +280,31 @@ namespace gem5
                 bool recvTimingResp(PacketPtr pkt)
                 {
                     sdmmanager->pkt_recv = pkt;
-                    printf("sdm recvTimingresp %lx:\n", pkt->getAddr());
-                    if (pkt->getAddr() == sdmmanager->waitAddr && pkt->isResponse())
-                    {
-                        sdmmanager->has_recv = true;
-                        if (sdmmanager->waitAddr >= 0x20000000000)
-                        {
-                            uint8_t *p = pkt->getPtr<uint8_t>();
-                            printf("sdm recvTimingresp %lx: ", sdmmanager->waitAddr);
-                            for (int i = 0; i < pkt->getSize(); i++)
-                            {
-                                printf("%02x ", *(p + i));
-                            }
-                            printf("\n");
-                        }
-                        else
-                        {
-                            printf("sdm recvTimingresp %lx: %s\n", sdmmanager->waitAddr, pkt->isRead() ? "read" : "write");
-                        }
-                    }
+                    sdmmanager->has_recv = true;
+                    // printf("sdm recvTimingresp %lx:\n", pkt->getAddr());
+                    // if (pkt->getAddr() == sdmmanager->waitAddr && pkt->isResponse())
+                    // {
+                    //     sdmmanager->has_recv = true;
+                    //     if (sdmmanager->waitAddr >= 0x20000000000)
+                    //     {
+                    //         uint8_t *p = pkt->getPtr<uint8_t>();
+                    //         printf("sdm recvTimingresp %lx: ", sdmmanager->waitAddr);
+                    //         for (int i = 0; i < pkt->getSize(); i++)
+                    //         {
+                    //             printf("%02x ", *(p + i));
+                    //         }
+                    //         printf("\n");
+                    //     }
+                    //     else
+                    //     {
+                    //         printf("sdm recvTimingresp %lx: %s\n", sdmmanager->waitAddr, pkt->isRead() ? "read" : "write");
+                    //     }
+                    // }
                     return true;
                 }
                 void recvReqRetry()
                 {
-                    printf("sDMmanager retry!\n");
+                    printf("sDMmanager retry\n");
                     panic("%s does not expect a retry\n", name());
                 }
             };
