@@ -238,6 +238,12 @@ def config_mem(options, system):
                 # Create the controller that will drive the interface
                 mem_ctrl = dram_intf.controller()
 
+                if(range_iter == 1):
+                    mem_ctrl.static_frontend_latency = "20ns"
+                    mem_ctrl.static_backend_latency = "20ns"
+                    print("yes\n")
+
+
                 mem_ctrls.append(mem_ctrl)
 
             elif opt_nvm_type and (not opt_mem_type or range_iter % 2 == 0):

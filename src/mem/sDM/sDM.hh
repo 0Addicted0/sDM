@@ -55,8 +55,8 @@ namespace gem5
         typedef uint64_t sdmIDtype;                // sdm空间编号类型 u64
         typedef uint64_t sdm_size;                 // sdm保护的数据的大小
         typedef uint8_t *sdm_dataPtr;              // 数据区指针
-        typedef uint8_t sdm_hashKey[SM4_KEY_SIZE]; // sdm space hash密钥(hmac iit)
-        typedef uint8_t sdm_CMEKey[SM3_KEY_SIZE];  // sdm space cme密钥
+        typedef uint8_t sdm_hashKey[SM3_KEY_SIZE]; // sdm space hash密钥(hmac iit)
+        typedef uint8_t sdm_CMEKey[SM4_KEY_SIZE];  // sdm space cme密钥
         typedef uint8_t sdm_HMAC[HMAC_SIZE];       // 一个SM3 HASH 256bit
         typedef uint8_t CL[CL_SIZE];
         extern uint64_t ceil(uint64_t a, uint64_t b);

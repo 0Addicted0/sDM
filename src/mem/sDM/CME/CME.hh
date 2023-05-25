@@ -9,6 +9,7 @@ namespace gem5
 {
     namespace CME
     {
+        void CMEdump(char *title, uint8_t *tptr, size_t sz);
         void ConstructOTP(sDM::Addr paddr2CL, uint8_t *counter, int counterLen, uint8_t *OTP);
         void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
         void sDM_Decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);

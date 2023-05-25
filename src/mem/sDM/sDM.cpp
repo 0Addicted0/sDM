@@ -22,13 +22,13 @@ namespace gem5
          * @author yqy
          * @brief dump page data
          */
-        void sDMdump(char *title,uint8_t *tptr, size_t sz = PAGE_SIZE)
+        void sDMdump(char *title, uint8_t *tptr, size_t sz = PAGE_SIZE)
         {
             printf("%s:\n", title);
             uint64_t *ptr = (uint64_t *)tptr;
             for (size_t i = 0; i < sz / 8; i++)
             {
-                printf("%08lx  ", ptr[i]);
+                printf("%016lx  ", ptr[i]);
                 if ((i + 1) % 4 == 0)
                     printf("\n");
             }
@@ -132,9 +132,9 @@ namespace gem5
             // };
 
             // pkt->writeDataToBlock(container, byte_size);
-            if(sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
+            if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
                 memcpy(container, sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), byte_size);
-            else 
+            else
             {
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
                 memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
@@ -362,26 +362,39 @@ namespace gem5
          */
         int sDMmanager::getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode)
         {
-            int pnum = 0;
+            int pnum = 0; // 目标页前面有多少逻辑页
             // 在sdm_space 中加了一个iITh变量，在getiitsize()函数里计算
             uint32_t h = sdm_table[id].iITh;
-            uint32_t node_rva = rva;
+            uint64_t nodenums = sdm_table[id].sDataSize / (IIT_LEAF_ARITY * CL_SIZE); // 叶节点数,之后表示当前层的节点数
+            uint64_t offset = (rva / CL_SIZE) / IIT_LEAF_ARITY;                       // 该偏移对应哪一个叶节点，之后表示相对当前层的节点偏移量
+            Addr offsetiit = offset * sizeof(iit_Node);                               // 相对于iit树第一个节点的偏移地址
+            printf("offset %lx nodenums %ld datasize %ld h %d\n", offset, nodenums, sdm_table[id].sDataSize, h);
             for (int i = 0; i < h; i++)
             {
                 // 远端物理地址
-                Addr NodePagePtr = find((Addr)sdm_table[id].iITPtrPagePtr, node_rva, sdm_table[id].iit_skip, 0, pnum);
-                NodePagePtr += (node_rva - pnum * PAGE_SIZE); // 目标页首地址加上偏移
-                keyPathAddr[i] = NodePagePtr;
-                // printf("getKeypath[%d]=0x%lx\n", i, NodePagePtr);
+                Addr NodePagePtr = find((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip, 0, pnum);
+                NodePagePtr += (offsetiit - pnum * PAGE_SIZE); // 目标页首地址加上偏移
+                keyPathAddr[i] = NodePagePtr;                  // 目标节点的远端物理地址
+                printf("getKeypath[%d]=0x%lx\n", i, NodePagePtr);
                 read4Mem(sizeof(iit_Node), (uint8_t *)(keyPathNode + sizeof(iit_Node) * i), NodePagePtr);
-                if (i == 0)
-                {
-                    node_rva /= IIT_LEAF_ARITY;
-                }
-                else
-                {
-                    node_rva /= IIT_MID_ARITY;
-                }
+                printf("nodenums:%ld offset:%ld\n", nodenums, offset);
+                offsetiit += (nodenums - offset) * sizeof(iit_Node);
+                // if (i == 0)
+                // {
+                //     nodenums /= IIT_LEAF_ARITY; // 下一层的节点数
+                //     offset /= IIT_LEAF_ARITY;   // 下一层的关键节点的偏移，相对于下一层第一个节点
+                //     sDMdump((char *)"first iit node", (uint8_t *)keyPathNode, sizeof(iit_Node));
+                // }
+                // else
+                // {
+                //     nodenums /= IIT_MID_ARITY; // 下一层的节点数
+                //     offset /= IIT_MID_ARITY;
+                // }
+                nodenums /= IIT_MID_ARITY; // 下一层的节点数
+                offset /= IIT_MID_ARITY;
+                sDMdump((char *)"iit node", (uint8_t *)(keyPathNode + sizeof(iit_Node) * i), sizeof(iit_Node));
+                offsetiit += offset * sizeof(iit_Node);
+                printf("ofssetiit addr %lx\n", offsetiit);
             }
             return h;
         }
@@ -466,6 +479,7 @@ namespace gem5
                 mem[cur].cur_segMax.con = local_phy_list[cur_seg].npages - cur_k + 1;
                 cur_k++;
                 // 检查l_hmac_phy_list[cur_seg]起始的连续页是否用完
+                printf("cur_k: %d  local_phy_list[sur_seg].npages:%d\n", cur_k, local_phy_list[cur_seg].npages);
                 if (cur_k <= local_phy_list[cur_seg].npages) // 还有连续页,最后一个页面不可能还存在连续段,这里一定不会越界
                 {
                     ptrPagePtr[cur + 1] = ptrPagePtr[cur] + PAGE_SIZE; // 指向下一个连续的本地页
@@ -510,8 +524,8 @@ namespace gem5
             printf("local_phy_list_size = %ld , remote_phy_list_size = %ld skip = %d\n", local_phy_list.size(), remote_phy_list.size(), skip);
             for (int i = 0; i < local_phy_list.size(); i++)
             {
-                // printf("---in build_SkipList local_phy[%d]0x%lx---\n", i, local_phy_list[i].start);
-                // sDMdump((uint8_t *)&mem[i]);
+                printf("---in build_SkipList local_phy[%d]0x%lx---\n", i, local_phy_list[i].start);
+                sDMdump("build_skiplist:", (uint8_t *)&mem[i]);
                 write2Mem(PAGE_SIZE, (uint8_t *)&mem[i], local_phy_list[i].start);
             }
         }
@@ -532,7 +546,7 @@ namespace gem5
             // 向数据空间写入0(并加密)
             CL_Counter cl{0};
             Addr addr = vaddr;
-
+            Addr startpaddr = 0;
             for (int i = 0; i < byte_size / CL_SIZE; i++)
             {
                 // 分CL加密并写入
@@ -540,10 +554,18 @@ namespace gem5
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
+                if (i == 0)
+                {
+                    startpaddr = paddr;
+                    printf("CME:data_paddr:%lx\n", paddr);
+                }
                 CME::sDM_Encrypt(buf, cl, sizeof(cl), paddr, ckey); // 加密数据
                 write2Mem(CL_SIZE, buf, paddr);                     // 写回内存
                 addr += CL_SIZE;
             }
+            uint8_t start_data[PAGE_SIZE >> 1];
+            read4Mem(PAGE_SIZE >> 1, start_data, startpaddr);
+            sDMdump("CME_data", (uint8_t *)start_data, PAGE_SIZE >> 1);
             printf("[%ld] sdm_init CME done\n", curTick());
             addr = vaddr;
 
@@ -556,7 +578,7 @@ namespace gem5
             for (int i = 0; i < byte_size / (PAGE_SIZE >> 1); i++)
             {
                 // Addr hpageAddr = (addr & PAGE_ALIGN_MASK) + (addr & (PAGE_SIZE >> 1)); // 加密使用的缓存行地址 unused
-                uint8_t dataptr[PAGE_SIZE >> 1];                                       // 用虚拟地址
+                uint8_t dataptr[PAGE_SIZE >> 1]; // 用虚拟地址
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
@@ -565,6 +587,23 @@ namespace gem5
 
                 CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, paddr, (uint8_t *)counter,
                               sizeof(iit_Node), hmac + (i & 1) * SM3_SIZE, SM3_SIZE); // 计算hash值，存入hmac
+                // if (i == 0)
+                // {
+                //     printf("start_1:\n");
+                //     sDMdump("HMAC_init:", (uint8_t *)counter, 64);
+                //     sDMdump("HMAC_init:hkey", hkey, 32);
+                //     printf("HMAC:dataptr:%lx,hkey:%lx,paddr:%lx,counter:%lx,", dataptr, hkey, paddr, (uint8_t *)counter);
+                //     sDMdump("hmac", hmac, sizeof(sdm_HMAC));
+                // }
+                // CME::sDM_HMAC(dataptr, PAGE_SIZE >> 1, hkey, paddr, (uint8_t *)counter,
+                //               sizeof(iit_Node), hmac + (i & 1) * SM3_SIZE, SM3_SIZE);
+                // if (i == 0)
+                // {
+                //     sDMdump("HMAC_init:", (uint8_t *)counter, 64);
+                //     sDMdump("HMAC_init:hkey", hkey, 16);
+                //     printf("HMAC:dataptr:%lx,hkey:%lx,paddr:%lx,counter:%lx,", dataptr, hkey, paddr, (uint8_t *)counter);
+                //     sDMdump("hmac", hmac, sizeof(sdm_HMAC));
+                // }
                 if (hmacpageAddrstart < hmacpageAddrend)
                 {
                     hmacpageAddrstart += SM3_SIZE;
@@ -583,13 +622,15 @@ namespace gem5
                 }
             }
             printf("[%ld]in sdm_init hmac done\n", curTick());
-            // 构建iit
+            // assert(0 && "need to break");
+            //  构建iit
             uint64_t leaf_num = byte_size / (IIT_LEAF_ARITY * CL_SIZE);
             uint64_t iitpPageindex = 0;
             block = r_iit_phy_list[iitpPageindex++];
             Addr curpPageAddrstart = block.start;
             Addr curpPageAddrend = curpPageAddrstart + block.npages * PAGE_SIZE;
             bool leaf = true; // 是否是叶节点
+            int tmp = 1;
             while (leaf_num > 1)
             {
                 uint64_t curlayernodenum = leaf_num; // 当前层结点
@@ -599,7 +640,7 @@ namespace gem5
                 while (curlayernodenum > 0)
                 {
                     i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
-                    _iit_Node node;
+                    iit_NodePtr node = new iit_Node();
                     // 算hash_tag
                     CL_Counter counter; // debug(CL_counter)?
                     uint8_t hmac[8];
@@ -607,19 +648,25 @@ namespace gem5
                     if (leaf)
                     { // 叶节点
 
-                        CME::sDM_HMAC((uint8_t *)(&node.leafNode), sizeof(_iit_Node),
+                        CME::sDM_HMAC((uint8_t *)(node->leafNode), sizeof(_iit_Node),
                                       hkey, hpageAddr + i * CL_SIZE, counter, sizeof(CL_Counter), hmac, 8);
                         // hpageAddr + i* CL_SIZE 是所在缓存行的首地址
                     }
                     else
                     { // 中间节点
-                        CME::sDM_HMAC((uint8_t *)(&node.midNode), sizeof(_iit_Node),
+                        CME::sDM_HMAC((uint8_t *)(node->midNode), sizeof(_iit_Node),
                                       hkey, hpageAddr + i * CL_SIZE, counter, sizeof(CL_Counter), hmac, 8);
                     }
                     iit_hash_tag hash_tag;
-                    memcpy((uint8_t *)&hash_tag, hmac, sizeof(iit_hash_tag));           // 把计算完的hash_tag放入
-                    node.embed_hash_tag(leaf ? IIT_LEAF_TYPE : IIT_MID_TYPE, hash_tag); // hash_tag嵌入到叶节点还是中间结点
-                    write2Mem(sizeof(_iit_Node), (uint8_t *)(&node), curpPageAddrstart);
+                    memcpy((uint8_t *)&hash_tag, hmac, sizeof(iit_hash_tag)); // 把计算完的hash_tag放入
+                    if (tmp == 1)
+                    {
+                        printf("init:iit_hash_hash_tag:%08x\n", hash_tag);
+                        tmp--;
+                        // sDMdump("init_counternohash_tag", (u_int8_t *)node, 64);
+                    }
+                    node->embed_hash_tag(leaf ? IIT_LEAF_TYPE : IIT_MID_TYPE, hash_tag); // hash_tag嵌入到叶节点还是中间结点
+                    write2Mem(sizeof(_iit_Node), (uint8_t *)node, curpPageAddrstart);
                     // 写入物理地址
                     curpPageAddrstart += sizeof(_iit_Node);
                     if (curpPageAddrstart >= curpPageAddrend)
@@ -651,6 +698,7 @@ namespace gem5
             assert(((vaddr & (PAGE_SIZE - 1)) == 0) &&
                    ((data_byte_size & (PAGE_SIZE - 1)) == 0) &&
                    "vaddr or size is not aligned pagesize");
+            printf("data_byte_size:%lx\n", data_byte_size);
             printf("[%ld]in sDMspace_register: pid=%ld vaddr=%lx size=%ldkB\n", curTick(), pid, vaddr, data_byte_size / 1024);
             // 准备新空间的metadata
             sdm_space sp;
@@ -681,6 +729,7 @@ namespace gem5
             // 为新空间设置id
             sp.id = ++sdm_space_cnt;
             sp.iITh = h;
+            sp.sDataSize = data_byte_size;
             sp.datavAddr = vaddr;
             printf("set dataVaddr=%lx h=%d\n", vaddr, h);
             // 为新空间设置密钥 暂时简单使用id做密钥
@@ -759,11 +808,17 @@ namespace gem5
             assert(entry != NULL);
             Addr pageAddr = entry->paddr;
             pageAddr |= (dataVAddr & (PAGE_SIZE >> 1));
+            printf("hmac_verify:%lx\n", pageAddr);
             uint8_t calc_hmac[SM3_SIZE];
             // 读取所在半页的内存数据
             read4Mem(PAGE_SIZE >> 1, hpg_data, pageAddr);
-            // 计算HMAC
+            sDMdump((char *)"hmac_verify_data:", hpg_data, PAGE_SIZE >> 1);
+            //  计算HMAC
             hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
+            printf("start_2:\n");
+            sDMdump("hmac_verify:counter", (u_int8_t *)counters, 64);
+            sDMdump("Hmac_get:hkey", hash_key, 32);
+            printf("Hmac_get:dataptr:%lx,hkey:%lx,paddr:%lx,counter:%lx,", hpg_data, hash_key, pageAddr, (uint8_t *)counters);
             // 与存储值比较
             int pnum = 0;
             // printf("rva=%lx\n", rva);
@@ -774,8 +829,8 @@ namespace gem5
             // 从本地内存中读取
             printf("in hmac_verify\n");
             read4Mem(sizeof(sdm_HMAC), stored_hmac, *hmacAddr);
-            sDMdump((char*)"old hmac", stored_hmac, sizeof(sdm_HMAC));
-            sDMdump((char*)"get hmac", calc_hmac, sizeof(sdm_HMAC));
+            sDMdump((char *)"old hmac", stored_hmac, sizeof(sdm_HMAC));
+            sDMdump((char *)"get hmac", calc_hmac, sizeof(sdm_HMAC));
             assert(memcmp(calc_hmac, stored_hmac, sizeof(sdm_HMAC)) == 0 && "HMAC verify failed");
             return true;
         }
@@ -797,8 +852,12 @@ namespace gem5
         {
             iit_Node tmpLeaf;
             *rva = getVirtualOffset(id, data_vaddr);
+            printf("sDM.cc : verify:rva:%lx,id:%ld\n", *rva, id);
             *h = getKeyPath(id, *rva, keyPathAddr, keyPathNode);
+            printf("getkeypath_h:%d\n", *h);
+            sDMdump("verify:counterbefore", (u_int8_t *)&keyPathNode[0], 64);
             keyPathNode[0].erase_hash_tag(IIT_LEAF_TYPE, &tmpLeaf);
+            sDMdump("verify:counterafter", (u_int8_t *)&tmpLeaf, 64);
             printf("getKeyPath done\n");
             // 1. HMAC校验
             assert(hmac_verify(data_vaddr, *rva, hmacAddr, id, hpg_data, &tmpLeaf, hash_key) && "HMAC verity failed"); // 该函数内会读取所在半页的加密数据到hpg_data[PAGE_SIZE/2]数组中
@@ -822,7 +881,9 @@ namespace gem5
                     verified = counter_cmp(cl, f_cl);
                 }
                 iit_hash_tag has_tag = keyPathNode[i].abstract_hash_tag(type);
+                printf("itt_verify:iit_hash_has_tag:%08x\n", has_tag);
                 iit_hash_tag chas_tag = keyPathNode[i].get_hash_tag(type, hash_key, keyPathAddr[i]);
+                printf("itt_verify:iit_hash_chas_tag:%08x\n", chas_tag);
                 // 比较计算值和存储值
                 assert(has_tag == chas_tag);
                 // 后续节点都是mid类型
@@ -858,6 +919,7 @@ namespace gem5
             iit_Node keyPathNode[MAX_HEIGHT] = {0};
             sdm_hashKey hash_key;
             sdm_table[id].key_get(HASH_KEY_TYPE, hash_key);
+            sDMdump("read_verify:hkey", hash_key, 16);
             Addr hmacAddr;                    // hmac在远端的物理地址
             uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
             // 注意这里验证使用了虚拟地址
