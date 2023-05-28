@@ -92,7 +92,9 @@ class BaseXBar : public ClockedObject
     {
 
       public:
+        enum State { IDLE, BUSY, RETRY };
 
+        State state;
         /**
          * Create a layer and give it a name. The layer uses
          * the crossbar an event manager.
@@ -200,9 +202,7 @@ class BaseXBar : public ClockedObject
          * layer, or goes to a busy state if the port does not
          * immediately react to the retry by calling sendTiming.
          */
-        enum State { IDLE, BUSY, RETRY };
 
-        State state;
 
         /**
          * A deque of ports that retry should be called on because

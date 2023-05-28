@@ -1,6 +1,6 @@
 TARGET_ISA=x86
 
-GEM5_HOME=/home/yqy/sDM
+GEM5_HOME=/home/ys/Desktop/sDM
 $(info   GEM5_HOME is $(GEM5_HOME))
 
 CXX=g++

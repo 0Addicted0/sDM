@@ -34,7 +34,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
-
+#define SDMDEBUG
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -341,7 +341,8 @@ namespace gem5
             bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
-            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list);
+            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, 
+                std::vector<phy_space_block> r_iit_phy_list,uint32_t h);
 
             sDMmanager(const sDMmanagerParams &p);
 

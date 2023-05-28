@@ -13,7 +13,9 @@ void *sdmmalloc(size_t len)
     addrmap[addr] = mallocret;
     for (int i = 0; i < len; i += PAGE_SIZE)
     {
-        ((char *)addr)[i] = 0;
+        ((char *)addr)[i] = 'a';
+        ((char *)addr)[i+1] = 'b';
+        ((char *)addr)[i+2] = 'c';
     }
     // 用于测试物理地址（gem5的虚拟地址）是否可直接写入
     // ((char *)addr)[1] = 2;
