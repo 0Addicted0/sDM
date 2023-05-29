@@ -173,7 +173,14 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     // determine the destination based on the destination address range
     PortID mem_side_port_id = findPort(pkt->getAddrRange());
-
+    
+    // if(pkt->checksDMflag())
+    // {
+    //     this->eventq->unlock();
+    //     while (reqLayers[mem_side_port_id]->state != reqLayers[mem_side_port_id]->IDLE)
+    //         this->eventq->serviceOne();
+    //     this->eventq->lock();
+    // }
     // test if the crossbar should be considered occupied for the current
     // port, and exclude express snoops from the check
     if (!is_express_snoop &&
@@ -343,6 +350,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         // update the layer state and schedule an idle event
         reqLayers[mem_side_port_id]->failedTiming(src_port,
                                                 clockEdge(Cycles(1)));
+        sDM::maxTick = std::max(MaxTick,clockEdge(Cycles(1)));
     } else {
         // express snoops currently bypass the crossbar state entirely
         if (!is_express_snoop) {
@@ -378,15 +386,6 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             {
                 auto h = this->eventq->getHead();
                 this->eventq->unlock();
-                // if(pkt->isWrite())
-                // {
-                //     printf("before serviceOne ");
-                //     this->eventq->dump();
-                // }
-                // if(pkt->getAddr()>=0x20000000000)
-                // {
-                //     printf("[%ld]in conherent_xbar [maxTick=%ld] %s\n", curTick(), sDM::maxTick,pkt->print().c_str());
-                // }
                 while(h && h->when() <= sDM::maxTick)
                 {
                     // printf("when=%ld , maxTick=%ld\n", h->when(), sDM::maxTick);

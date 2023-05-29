@@ -51,6 +51,8 @@
 #include <string>
 #include <vector>
 
+#include"mem/sDM/sDMglb.hh"
+
 #include "base/intmath.hh"
 #include "base/loader/object_file.hh"
 #include "base/loader/symtab.hh"
@@ -66,6 +68,8 @@
 #include "sim/se_workload.hh"
 #include "sim/syscall_desc.hh"
 #include "sim/system.hh"
+
+std::vector<gem5::sDM::sDMmanager *> sDMmanagers;
 
 namespace gem5
 {
@@ -186,6 +190,7 @@ namespace gem5
         sDMmanager->mem_pools = &(this->seWorkload->memPools);
         sDMmanager->process = this;
         printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
+        sDMmanagers.push_back(sDMmanager);
         // system->proc.push_back(this);
     }
 

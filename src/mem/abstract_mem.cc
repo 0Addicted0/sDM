@@ -52,6 +52,7 @@
 #include "sim/system.hh"
 
 std::vector<gem5::memory::AbstractMemory *> sDMdrams;
+extern std::vector<gem5::sDM::sDMmanager *> sDMmanagers;
 
 namespace gem5
 {
@@ -457,7 +458,7 @@ AbstractMemory::access(PacketPtr pkt)
             {// read 函数会将解密后的结果放在dataCpoy中
                 if(pkt->req->hasVaddr())
                     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                else if(rpTable.count(pkt->getAddr() - offset))
+                else if(rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
                 {
                     Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
                     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
@@ -497,12 +498,16 @@ AbstractMemory::access(PacketPtr pkt)
                 {
                     if(pkt->req->hasVaddr())
                     {
-                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->getAddr() - offset);
+                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->req->getVaddr() - offset);
                     }
-                    else 
+                }
+                else
+                {
+                    uint32_t num = sDMmanagers.size();
+                    for (int i = 0; i < num;i++)
                     {
-                        Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
-                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, vaddr);
+                        Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
+                        sDMmanagers[i]->write(pkt, dataCpoy, vaddr & CL_ALIGN_MASK);
                     }
                 }
                 // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
