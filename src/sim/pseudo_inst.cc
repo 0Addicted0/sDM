@@ -639,5 +639,11 @@ namespace gem5
             return false;
         }
 
+        void downkeypath(ThreadContext *tc){
+            Process *process = tc->getProcessPtr();
+            uint64_t pid = process->pid();
+            process->sDMmanager->keypathdown();
+        }
+
     } // namespace pseudo_inst
 } // namespace gem5

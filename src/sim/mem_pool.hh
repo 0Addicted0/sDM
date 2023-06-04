@@ -64,6 +64,7 @@ class MemPool : public Serializable
     friend class MemPools;
 
   public:
+    uint64_t minfreepage = UINT64_MAX;
     MemPool(Addr page_shift, Addr ptr, Addr limit);
 
     Counter startPage() const;
@@ -95,7 +96,7 @@ class MemPools : public Serializable
 
   public:
     MemPools(Addr page_shift) : pageShift(page_shift) {}
-
+    std::vector<MemPool> getpools();
     void populate(const AddrRangeList &memories);
 
     /// Allocate npages contiguous unused physical pages.

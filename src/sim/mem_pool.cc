@@ -116,6 +116,7 @@ MemPool::allocate(int npages)
 {
     Addr return_addr = freePageAddr();
     freePageNum += npages;
+    minfreepage = std::min((uint64_t)freePages(), minfreepage);
     assert(freePages() >= 0 && "Out of memory, please increase size of physical memory.");
     // }
     // fatal_if(freePages() <= 0,
@@ -205,6 +206,10 @@ MemPools::unserialize(CheckpointIn &cp)
         pool.unserializeSection(cp, csprintf("pool%d", i));
         pools.push_back(pool);
     }
+}
+
+std::vector<MemPool> MemPools::getpools(){
+    return pools;
 }
 
 } // namespace gem5

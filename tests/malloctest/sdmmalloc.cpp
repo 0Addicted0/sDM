@@ -35,5 +35,6 @@ bool sdmfree(void *ptr)
     void *realptr = addrmap[ptr];
     free(realptr);
     addrmap.erase(ptr);
+    m5_downkeypath();  //down 出keypath
     return true;
 }

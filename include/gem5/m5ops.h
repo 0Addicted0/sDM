@@ -71,6 +71,7 @@ void m5_work_end(uint64_t workid, uint64_t threadid);
  * 返回gem5分配的虚拟地址到sDMmanager 
 */
 bool m5_sdm_poster(uint64_t vaddr,size_t size);
+void m5_downkeypath();
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
  * the workload to know what information to look for to interpret an event,

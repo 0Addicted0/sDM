@@ -50,6 +50,7 @@ namespace gem5
 {
     namespace sDM
     {
+        
         // struct sDMmanagerParams;
 
         typedef uint64_t sdmIDtype;                // sdm空间编号类型 u64
@@ -345,7 +346,6 @@ namespace gem5
                 std::vector<phy_space_block> r_iit_phy_list,uint32_t h);
 
             sDMmanager(const sDMmanagerParams &p);
-
             sdmIDtype isContained(Addr vaddr);
             bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
             Addr getVirtualOffset(sdmIDtype id, Addr paddr);
@@ -362,6 +362,8 @@ namespace gem5
                     return memPort;
                 return sDMmanager::getPort(if_name, idx);
             }
+
+            void keypathdown();
         };
     }
 }
