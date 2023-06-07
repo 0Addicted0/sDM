@@ -466,6 +466,7 @@ AbstractMemory::access(PacketPtr pkt)
                 // 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
             }
             pkt->setData(dataCpoy + offset);
+            printf("read,%ld,%d\n",pkt->getAddr(),pkt->getSize());
             // if(pkt->getAddr() >= 0x20000000000)
             // {
             //     printf("[%ld]abstrace_mem read[%lx:%lx]", curTick(), pkt->getAddr(), pkt->getAddr() + pkt->getSize() - 1);
@@ -512,6 +513,7 @@ AbstractMemory::access(PacketPtr pkt)
                 }
                 // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
                 memcpy(host_addr - offset, dataCpoy, CL_SIZE);
+                printf("write,%ld,%d\n",pkt->getAddr(),pkt->getSize());
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }

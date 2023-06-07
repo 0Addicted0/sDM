@@ -280,59 +280,59 @@ namespace gem5
             // 这里直接调用
             // printf("[%ld]in sdm_malloc npages=%d pool_id=%d\n", curTick(), npages, pool_id);
 
-            uint32_t respages = npages;
-            while (respages > 0)
-            {
-                uint32_t needpages = rand() % 10 + 1;
-                if (needpages > 5)
-                { //%50的概率是16kB的连续空间
-                    if (respages >= 4)
-                    {
-                        needpages = 4;
-                    }
-                    else
-                    {
-                        needpages = respages;
-                    }
-                }
-                else if (needpages >= 3 && needpages <= 5)
-                {
-                    if (respages >= 2)
-                    { //%30的概率有连续的8KB
-                        needpages = 2;
-                    }
-                    else
-                    {
-                        needpages = respages;
-                    }
-                }
-                else
-                {
-                    if (respages >= 1)
-                    { //%30的概率有连续的1MB
-                        needpages = 1;
-                    }
-                    else
-                    {
-                        needpages = respages;
-                    }
-                }
-                respages -= needpages;
-                Addr start = mem_pools->allocPhysPages(needpages, pool_id);
-                if (start == POOL_EXHAUSTED)
-                {
-                    return false;
-                }
-                phy_list.push_back({start, npages});
-                int next = 1;
-                mem_pools->allocPhysPages(next, pool_id);
-            }
+            // uint32_t respages = npages;
+            // while (respages > 0)
+            // {
+            //     uint32_t needpages = rand() % 10 + 1;
+            //     if (needpages > 5)
+            //     { //%50的概率是16kB的连续空间
+            //         if (respages >= 4)
+            //         {
+            //             needpages = 4;
+            //         }
+            //         else
+            //         {
+            //             needpages = respages;
+            //         }
+            //     }
+            //     else if (needpages >= 3 && needpages <= 5)
+            //     {
+            //         if (respages >= 2)
+            //         { //%30的概率有连续的8KB
+            //             needpages = 2;
+            //         }
+            //         else
+            //         {
+            //             needpages = respages;
+            //         }
+            //     }
+            //     else
+            //     {
+            //         if (respages >= 1)
+            //         { //%30的概率有连续的1MB
+            //             needpages = 1;
+            //         }
+            //         else
+            //         {
+            //             needpages = respages;
+            //         }
+            //     }
+            //     respages -= needpages;
+            //     Addr start = mem_pools->allocPhysPages(needpages, pool_id);
+            //     if (start == POOL_EXHAUSTED)
+            //     {
+            //         return false;
+            //     }
+            //     phy_list.push_back({start, npages});
+            //     int next = 1;
+            //     mem_pools->allocPhysPages(next, pool_id);
+            // }
 
-            for (int i = 0; i < phy_list.size(); i++)
-            {
-                printf("phy_list{%lx} {%d}\n", phy_list[i].start, phy_list[i].npages);
-            }
-            return 1;
+            // for (int i = 0; i < phy_list.size(); i++)
+            // {
+            //     printf("phy_list{%lx} {%d}\n", phy_list[i].start, phy_list[i].npages);
+            // }
+            // return 1;
             Addr start = mem_pools->allocPhysPages(npages, pool_id); // 调用gem5物理内存分配函数直接分配
             // 由于gem5本身没有处理不连续的地址情况,所以一定是连续的
             if (start == POOL_EXHAUSTED)
@@ -1012,6 +1012,7 @@ namespace gem5
             sdmIDtype id = sDMmanager::isContained(pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
+            pkt->headerDelay += 80*sdm_table[id].iITh+40;
             return;
             printf("check read[%lx:%lx]\n", pkt_vaddr, pkt_vaddr + CL_SIZE - 1);
             // 这个assert转移到上层函数abstract_mem.cc的access函数中检查
@@ -1065,6 +1066,7 @@ namespace gem5
             sdmIDtype id = isContained(pktVAddr);
             if (!id) // 无需修改任何数据包
                 return;
+            pkt->headerDelay += 80*sdm_table[id].iITh+2*40;
             return;
             m[process->pTable->lookup(pktVAddr & (PAGE_ALIGN_MASK))->paddr + pktVAddr & (~PAGE_ALIGN_MASK)]++;
             Addr rva; // 该地址在所属空间中的相对偏移

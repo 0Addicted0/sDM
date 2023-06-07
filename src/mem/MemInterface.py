@@ -63,8 +63,8 @@ class MemInterface(AbstractMemory):
     # each entry corresponds to a burst for the specific memory channel
     # configuration (e.g. x32 with burst length 8 is 32 bytes) and not
     # the cacheline size or request/packet size
-    write_buffer_size = Param.Unsigned(64, "Number of write queue entries")
-    read_buffer_size = Param.Unsigned(32, "Number of read queue entries")
+    write_buffer_size = Param.Unsigned(128, "Number of write queue entries")
+    read_buffer_size = Param.Unsigned(64, "Number of read queue entries")
 
     # scheduler, address map
     addr_mapping = Param.AddrMap("RoRaBaCoCh", "Address mapping policy")

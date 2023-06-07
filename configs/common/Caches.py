@@ -59,20 +59,22 @@ class L1Cache(Cache):
 
 
 class L1_ICache(L1Cache):
+    assoc = 2
     is_read_only = True
     # Writeback clean lines as well
     writeback_clean = True
 
 
 class L1_DCache(L1Cache):
+    assoc = 4
     pass
 
 
 class L2Cache(Cache):
-    assoc = 8
-    tag_latency = 20
-    data_latency = 20
-    response_latency = 20
+    assoc = 16
+    tag_latency = 13
+    data_latency = 13
+    response_latency = 5
     mshrs = 20
     tgts_per_mshr = 12
     write_buffers = 8

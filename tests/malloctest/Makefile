@@ -1,6 +1,6 @@
 TARGET_ISA=x86
 
-GEM5_HOME=/home/ys/Desktop/sDM
+GEM5_HOME=/home/ubuntu/fanchuan/test/sDM
 $(info   GEM5_HOME is $(GEM5_HOME))
 
 CXX=g++
@@ -15,8 +15,10 @@ OBJECTS= malloctest.o
 all: malloctest
 
 malloctest:
-	$(CXX) -o $(OBJECTS) sort.cpp sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
+	$(CXX) -o $(OBJECTS) malloctest.cpp sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
 	$(CXX) -o hello.o hello.cpp
+	$(CXX) -O -DREG=register dhrystone.c -o dhrystone.o
+	$(CXX) -o $(OBJECTS) primes.c sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
 
 clean:
 	rm -f $(LIBOBJECTS)
