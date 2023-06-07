@@ -239,8 +239,8 @@ def config_mem(options, system):
                 mem_ctrl = dram_intf.controller()
 
                 if(range_iter == 1):
-                    mem_ctrl.static_frontend_latency = "20ns"
-                    mem_ctrl.static_backend_latency = "20ns"
+                    mem_ctrl.static_frontend_latency = "400ns"
+                    mem_ctrl.static_backend_latency = "400ns"
                     print("yes\n")
 
 

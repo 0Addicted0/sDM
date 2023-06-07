@@ -1012,6 +1012,7 @@ namespace gem5
             sdmIDtype id = sDMmanager::isContained(pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
                 return;
+            pkt->headerDelay += 80*sdm_table[id].iITh+40;
             return;
             printf("check read[%lx:%lx]\n", pkt_vaddr, pkt_vaddr + CL_SIZE - 1);
             // 这个assert转移到上层函数abstract_mem.cc的access函数中检查
@@ -1065,6 +1066,7 @@ namespace gem5
             sdmIDtype id = isContained(pktVAddr);
             if (!id) // 无需修改任何数据包
                 return;
+            pkt->headerDelay += 80*sdm_table[id].iITh+2*40;
             return;
             m[process->pTable->lookup(pktVAddr & (PAGE_ALIGN_MASK))->paddr + pktVAddr & (~PAGE_ALIGN_MASK)]++;
             Addr rva; // 该地址在所属空间中的相对偏移
