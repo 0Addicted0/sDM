@@ -10,10 +10,26 @@
 #define GETIPAD(x, y)                    \
     for (int i = 0; i < SM3_PADLEN; i++) \
         (x)[i] = (y)[i] ^ 0x36;
+
+// #define CME_debug 1
+
 namespace gem5
 {
     namespace CME
     {
+        void dump(char *title, uint8_t *txt, int len)
+        {
+            printf("%s\n\t", title);
+            for (int i = 0; i < len; i++)
+            {
+                printf("%02x ", txt[i]);
+                if ((i + 1) % 8 == 0)
+                    printf("\t");
+                if ((i + 1) % 16 == 0)
+                    printf("\n\t");
+            }
+            printf("\n");
+        }
         /**
          * CME
          * |  -----------------------------------\
@@ -48,13 +64,13 @@ namespace gem5
             *((sDM::Addr *)(OTP + 10)) = paddr2CL; // 10~17B:addr
                                                    // 18~19B:0x0
             for (int i = 0; i < counterLen; i++)
-                *(OTP + 20 + i) = *counter;        // 20~29B:counter
-            *((sDM::Addr *)(OTP + 30)) = paddr2CL; // 30~37B:addr
-                                                   // 38~39B:0x0
+                *(OTP + 20 + i) = *counter;            // 20~29B:counter
+            *((sDM::Addr *)(OTP + 30)) = paddr2CL + 1; // 30~37B:addr
+                                                       // 38~39B:0x0
             for (int i = 0; i < counterLen; i++)
-                *(OTP + 40 + i) = *counter;        // 40~49B:counter
-            *((sDM::Addr *)(OTP + 50)) = paddr2CL; // 50-47B:addr
-                                                   // 58~59B:0x0
+                *(OTP + 40 + i) = *counter;            // 40~49B:counter
+            *((sDM::Addr *)(OTP + 50)) = paddr2CL + 1; // 50-47B:addr
+                                                       // 58~59B:0x0
 
             *((uint8_t *)(OTP + 60)) = MAGIC1; // 60B:MAGIC1
             *((uint8_t *)(OTP + 61)) = MAGIC2; // 61B:MAGIC2
@@ -73,10 +89,14 @@ namespace gem5
          */
         void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr addr2CL, uint8_t *key2EncryptionCL)
         {
-            return;
+            // return;
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_cipher[SM4_INPUT_SIZE];
             ConstructOTP(addr2CL, counter, counterLen, OTP);
+#ifdef CME_debug
+            // dump("OTP", OTP, CL_SIZE);
+            // dump("enc key",key2EncryptionCL,SM4_KEY_SIZE);
+#endif
             memset(otp_cipher, 0, SM4_INPUT_SIZE);
             int rdcnt = CL_SIZE / SM4_INPUT_SIZE;
             for (int i = 0; i < rdcnt; i++)
@@ -97,16 +117,20 @@ namespace gem5
          */
         void sDM_Decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
         {
-            return;
+            // return;W
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_plaint[SM4_INPUT_SIZE];
             ConstructOTP(paddr2CL, counter, counterLen, OTP);
-
+#ifdef CME_debug
+            // dump("OTP", OTP, CL_SIZE);
+            // dump("Plaint", cipher, CL_SIZE);
+            // dump("dec key",key2EncryptionCL,SM4_KEY_SIZE);
+#endif
             memset(otp_plaint, 0, SM4_INPUT_SIZE);
             int rdcnt = CL_SIZE / SM4_INPUT_SIZE;
             for (int i = 0; i < rdcnt; i++)
             {
-                sm4::SM4_Decrypt(key2EncryptionCL, OTP + (i << 4), otp_plaint);
+                sm4::SM4_Encrypt(key2EncryptionCL, OTP + (i << 4), otp_plaint);
                 for (int j = 0; j < SM4_INPUT_SIZE; j++)
                     (*(cipher + (i << 4) + j)) ^= otp_plaint[j];
             }
