@@ -163,8 +163,8 @@ MemPools::freePages(int pool_id) const
 Addr
 MemPools::allocPhysPages(int npages, int pool_id)
 {
-    if(npages>1)
-        printf("mem_pool.cc alloc %ld-%d (id=%d)\n",freePages(pool_id) , npages, pool_id);
+    // if(npages>1)
+    //     printf("mem_pool.cc alloc %ld-%d (id=%d)\n",freePages(pool_id) , npages, pool_id);
     return pools[pool_id].allocate(npages);
 }
 

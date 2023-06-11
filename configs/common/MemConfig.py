@@ -241,7 +241,7 @@ def config_mem(options, system):
                 if(range_iter == 1):
                     mem_ctrl.static_frontend_latency = "400ns"
                     mem_ctrl.static_backend_latency = "400ns"
-                    print("yes\n")
+                    # print("yes\n")
 
 
                 mem_ctrls.append(mem_ctrl)

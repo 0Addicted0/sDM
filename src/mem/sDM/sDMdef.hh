@@ -41,7 +41,7 @@
 #define IIT_LEAF_MINOR_MAXM 0x0FFF       // 叶节点的major counter最大值
 #define IIT_MID_MINOR_MAXM 0x3F          // 中间节点点的minor counter最大值
 // #define LITTLE_ENDIAN 1               // 使用小端模式嵌入 conflict with gem5
-#define SM3_KEY_SIZE SM3_len / BYTE2BIT // 基于sm3的hmac密钥
+#define SM3_KEY_SIZE  32                 // 基于sm3的hmac密钥 SM3_len / BYTE2BIT
 #define HASH_KEY_TYPE 0
 #define CME_KEY_TYPE 1
 namespace gem5

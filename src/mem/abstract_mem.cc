@@ -454,19 +454,26 @@ AbstractMemory::access(PacketPtr pkt)
             // yqy mark
             // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
             memcpy(dataCpoy, host_addr - offset, CL_SIZE);// 先取出CL_SIZE对齐的内存数据
-            if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有contextID
-            {// read 函数会将解密后的结果放在dataCpoy中
-                if(pkt->req->hasVaddr())
-                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                else if(rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
-                {
-                    Addr vaddr = rpTable[pkt->getAddr() - offset];// 切换为虚拟地址
-                    system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, vaddr);
-                }  
-                // 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
-            }
-            pkt->setData(dataCpoy + offset);
-            printf("read,%ld,%d\n",pkt->getAddr(),pkt->getSize());
+            // if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有contextID
+            // {// read 函数会将解密后的结果放在dataCpoy中
+                // if(curTick() == 277980562000)
+                // {
+                //     printf("catch packet: %s\n",pkt->print().c_str());
+                //     printf("vaddr = %lx offset = %lx paddr=%lx ,reqsize=%d, psize=%d\n", pkt->req->getVaddr(), offset, pkt->getAddr() ,pkt->req->getSize(),pkt->getSize());
+                // }
+                // if(pkt->req->hasVaddr())
+                //     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+
+            if(rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
+            {
+                Addr vaddr = rpTable[pkt->getAddr() - offset] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
+                uint32_t num = sDMmanagers.size();
+                for (int i = 0; i < num;i++)
+                    sDMmanagers[i]->read(pkt, dataCpoy, vaddr);
+            }  
+            // }
+            pkt->setData(dataCpoy + offset);// 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
+            // printf("read,%ld,%d\n",pkt->getAddr(),pkt->getSize());
             // if(pkt->getAddr() >= 0x20000000000)
             // {
             //     printf("[%ld]abstrace_mem read[%lx:%lx]", curTick(), pkt->getAddr(), pkt->getAddr() + pkt->getSize() - 1);
@@ -494,26 +501,33 @@ AbstractMemory::access(PacketPtr pkt)
                 // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
                 assert(pkt->getSize() <= CL_SIZE);
                 memcpy(dataCpoy, host_addr - offset, CL_SIZE);
+                if(offset > 0)
+                    assert(pkt->getSize() < CL_SIZE && "over 2 CL");
                 pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());// 这里不会破坏密文,因为write函数中会重新读取所在的半页数据
-                if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
-                {
-                    if(pkt->req->hasVaddr())
-                    {
-                        system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                    }
-                }
-                else
+                // if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
+                // {
+                //     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->req->getVaddr() - offset);
+                // }
+                // else
+                // {
+                    // uint32_t num = sDMmanagers.size();
+                    // Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
+                    // for (int i = 0; i < num;i++)
+                    // {
+                    //     sDMmanagers[i]->write(pkt, dataCpoy, vaddr & CL_ALIGN_MASK);
+                    // }
+
+                if (rpTable.count((pkt->getAddr() - offset) & PAGE_ALIGN_MASK))
                 {
                     uint32_t num = sDMmanagers.size();
+                    Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
                     for (int i = 0; i < num;i++)
-                    {
-                        Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
-                        sDMmanagers[i]->write(pkt, dataCpoy, vaddr & CL_ALIGN_MASK);
-                    }
+                        sDMmanagers[i]->write(pkt, dataCpoy, vaddr);
                 }
+                // }
                 // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
                 memcpy(host_addr - offset, dataCpoy, CL_SIZE);
-                printf("write,%ld,%d\n",pkt->getAddr(),pkt->getSize());
+                // printf("write,%ld,%d\n",pkt->getAddr(),pkt->getSize());
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }

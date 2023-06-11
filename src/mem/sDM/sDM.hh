@@ -34,7 +34,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
-#define SDMDEBUG 1
+// #define SDMDEBUG 1
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定

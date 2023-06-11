@@ -12,6 +12,7 @@
         (x)[i] = (y)[i] ^ 0x36;
 
 // #define CME_debug 1
+// #define HMAC_debug 1
 
 namespace gem5
 {
@@ -65,11 +66,11 @@ namespace gem5
                                                    // 18~19B:0x0
             for (int i = 0; i < counterLen; i++)
                 *(OTP + 20 + i) = *counter;            // 20~29B:counter
-            *((sDM::Addr *)(OTP + 30)) = paddr2CL + 1; // 30~37B:addr
+            *((sDM::Addr *)(OTP + 30)) = paddr2CL + 1; // 30~37B:addr+1
                                                        // 38~39B:0x0
             for (int i = 0; i < counterLen; i++)
                 *(OTP + 40 + i) = *counter;            // 40~49B:counter
-            *((sDM::Addr *)(OTP + 50)) = paddr2CL + 1; // 50-47B:addr
+            *((sDM::Addr *)(OTP + 50)) = paddr2CL + 1; // 50-47B:addr+2
                                                        // 58~59B:0x0
 
             *((uint8_t *)(OTP + 60)) = MAGIC1; // 60B:MAGIC1
@@ -87,15 +88,18 @@ namespace gem5
          * @param paddr2CL CL的物理地址
          * @param key2EncryptionCL 加密密钥指针
          */
-        void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr addr2CL, uint8_t *key2EncryptionCL)
+        void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
         {
             // return;
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_cipher[SM4_INPUT_SIZE];
-            ConstructOTP(addr2CL, counter, counterLen, OTP);
+            ConstructOTP(paddr2CL, counter, counterLen, OTP);
 #ifdef CME_debug
-            // dump("OTP", OTP, CL_SIZE);
-            // dump("enc key",key2EncryptionCL,SM4_KEY_SIZE);
+            printf("addr=%lx ", paddr2CL);
+            // dump("counter", counter, counterLen);
+            // dump("key", key2EncryptionCL, SM4_KEY_SIZE);
+            dump("OTP", OTP, CL_SIZE);
+            dump("plaint", plaint, CL_SIZE);
 #endif
             memset(otp_cipher, 0, SM4_INPUT_SIZE);
             int rdcnt = CL_SIZE / SM4_INPUT_SIZE;
@@ -105,6 +109,10 @@ namespace gem5
                 for (int j = 0; j < SM4_INPUT_SIZE; j++)
                     (*(plaint + (i << 4) + j)) ^= otp_cipher[j];
             }
+#ifdef CME_debug
+            dump("cipher", plaint, CL_SIZE);
+            printf("*******************************\n\n");
+#endif
         }
         /**
          * @brief 使用counter mode解密cipher
@@ -122,9 +130,11 @@ namespace gem5
             uint8_t OTP[CL_SIZE], otp_plaint[SM4_INPUT_SIZE];
             ConstructOTP(paddr2CL, counter, counterLen, OTP);
 #ifdef CME_debug
-            // dump("OTP", OTP, CL_SIZE);
-            // dump("Plaint", cipher, CL_SIZE);
-            // dump("dec key",key2EncryptionCL,SM4_KEY_SIZE);
+            printf("addr=%lx ", paddr2CL);
+            // dump("counter", counter, counterLen);
+            // dump("key", key2EncryptionCL, SM4_KEY_SIZE);
+            dump("OTP", OTP, CL_SIZE);
+            dump("cipher", cipher, CL_SIZE);
 #endif
             memset(otp_plaint, 0, SM4_INPUT_SIZE);
             int rdcnt = CL_SIZE / SM4_INPUT_SIZE;
@@ -134,6 +144,10 @@ namespace gem5
                 for (int j = 0; j < SM4_INPUT_SIZE; j++)
                     (*(cipher + (i << 4) + j)) ^= otp_plaint[j];
             }
+#ifdef CME_debug
+            dump("plaint", cipher, CL_SIZE);
+            printf("*******************************\n\n");
+#endif
         }
 
         void CMEdump(char *title, uint8_t *tptr, size_t sz = PAGE_SIZE)
@@ -167,8 +181,17 @@ namespace gem5
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
             memset(hmac, 0, hmacLen);
-            return;
             assert(hmacLen <= SM3_SIZE && "invalid output length");
+#ifdef HMAC_debug
+            if (inputLen == 64)
+            {
+                dump("input", input, inputLen);
+                dump("hamc_key", hamc_key, 32);
+                printf("addr=%lx\n", paddr);
+                dump("counter", counter, counterLen);
+            }
+#endif
+
             int Mlen = (inputLen + counterLen + sizeof(sDM::Addr));
             // printf("CME:Mlen:%d\n", Mlen);
             int PaddingLen = (SM3_SIZE - (Mlen % SM3_SIZE)) % SM3_SIZE;
@@ -198,6 +221,12 @@ namespace gem5
             // CMEdump("CME:finnal_p1:", p1, 32);
             //  cut
             memcpy(hmac, p1, hmacLen);
+#ifdef HMAC_debug
+            if (inputLen == 64)
+            {
+                dump("HMAC", hmac, hmacLen);
+            }
+#endif
         }
     }
 }

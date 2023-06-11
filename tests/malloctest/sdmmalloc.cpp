@@ -4,10 +4,10 @@ static unordered_map<void *, void *> addrmap; // 记录原起始地址
 void *sdmmalloc(size_t len)
 {
     len = (len & PAGE_ALIGN_MASK) + (len & (~PAGE_ALIGN_MASK) == 0 ? 0 : PAGE_SIZE); // 长度对齐
-    printf("sDMAlloc:len = %d\n", (int)len);
+    printf("sDMAlloc:size = %ld\n", len);
     size_t newlen = len + PAGE_SIZE;
     void *mallocret = malloc(newlen);
-    printf("sDMAlloc:ret %p\n", mallocret);
+    // printf("sDMAlloc:ret %p\n", mallocret);E
     void *addr = (void *)((uint64_t)mallocret + PAGE_SIZE - ((uint64_t)mallocret & (~PAGE_ALIGN_MASK)));
     printf("sDMAlloc:vaddr %p\n", addr); // 地址对齐,但是会导致可用空间比申请的空间大一点（最多一个页?）
     addrmap[addr] = mallocret;
@@ -35,6 +35,6 @@ bool sdmfree(void *ptr)
     void *realptr = addrmap[ptr];
     free(realptr);
     addrmap.erase(ptr);
-    m5_downkeypath();  //down 出keypath
+    // m5_downkeypath();  //down 出keypath
     return true;
 }
