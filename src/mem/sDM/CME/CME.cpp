@@ -125,7 +125,7 @@ namespace gem5
          */
         void sDM_Decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
         {
-            // return;W
+            // return;
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_plaint[SM4_INPUT_SIZE];
             ConstructOTP(paddr2CL, counter, counterLen, OTP);
@@ -180,6 +180,7 @@ namespace gem5
          */
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
+            // return;
             memset(hmac, 0, hmacLen);
             assert(hmacLen <= SM3_SIZE && "invalid output length");
 #ifdef HMAC_debug
@@ -191,7 +192,6 @@ namespace gem5
                 dump("counter", counter, counterLen);
             }
 #endif
-
             int Mlen = (inputLen + counterLen + sizeof(sDM::Addr));
             // printf("CME:Mlen:%d\n", Mlen);
             int PaddingLen = (SM3_SIZE - (Mlen % SM3_SIZE)) % SM3_SIZE;

@@ -59,22 +59,23 @@ namespace gem5
 
 namespace memory
 {
-
-AbstractMemory::AbstractMemory(const Params &p) :
-    ClockedObject(p), range(p.range), pmemAddr(NULL),
-    backdoor(params().range, nullptr,
-             (MemBackdoor::Flags)(MemBackdoor::Readable |
-                                  MemBackdoor::Writeable)),
-    confTableReported(p.conf_table_reported), inAddrMap(p.in_addr_map),
-    kvmMap(p.kvm_map), _system(NULL),
-    stats(*this)
-{
-    panic_if(!range.valid() || !range.size(),
-             "Memory range %s must be valid with non-zero size.",
-             range.to_string());
-    //  yqy mark
-    sDMdrams.push_back(this);
-    printf("AbstractMemory %s constructed!!\n",range.to_string().c_str());
+    // uint8_t hmac[64];
+    // uint8_t imt[192];
+    // uint8_t tdata[64];
+    AbstractMemory::AbstractMemory(const Params &p) : ClockedObject(p), range(p.range), pmemAddr(NULL),
+                                                      backdoor(params().range, nullptr,
+                                                               (MemBackdoor::Flags)(MemBackdoor::Readable |
+                                                                                    MemBackdoor::Writeable)),
+                                                      confTableReported(p.conf_table_reported), inAddrMap(p.in_addr_map),
+                                                      kvmMap(p.kvm_map), _system(NULL),
+                                                      stats(*this)
+    {
+        panic_if(!range.valid() || !range.size(),
+                 "Memory range %s must be valid with non-zero size.",
+                 range.to_string());
+        //  yqy mark
+        sDMdrams.push_back(this);
+        printf("AbstractMemory %s constructed!!\n", range.to_string().c_str());
 }
 
 void
@@ -451,19 +452,61 @@ AbstractMemory::access(PacketPtr pkt)
             trackLoadLocked(pkt);
         }
         if (pmemAddr) {
-            // yqy mark
-            // 这里应该是gem5模拟的物理内存(虚拟机分配给gem5的空间)中读取数据
+            
+            // if(pkt->req->hasVaddr() && pkt->req->getVaddr()==0x19eb0)
+            //     printf("paddr=%lx\n", pkt->getAddr());
+            // if(pkt->getAddr()==0x1a7000 && curTick()==278427797500)
+            // {
+            //     freopen("/dev/pts/1", "w+", stdout);
+            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
+            //     CME::dump("secret", host_addr, CL_SIZE);
+            //     memcpy(tdata, host_addr, CL_SIZE);
+            //     CME::dump("HMAC", toHostAddr(0x1a8000), CL_SIZE);
+            //     memcpy(hmac, toHostAddr(0x1a8000), CL_SIZE);
+            //     CME::dump("iMT",toHostAddr(0x1a9000),CL_SIZE * 3);
+            //     memcpy(imt, toHostAddr(0x1a9000), CL_SIZE * 3);
+            //     freopen("/dev/pts/0", "w+", stdout);
+            // }
+            // if(pkt->getAddr()==0x1a7000 && curTick()==278508112000)
+            // {
+            //     freopen("/dev/pts/1", "w+", stdout);
+            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
+            //     printf("replay...\n");
+            //     memcpy(host_addr, tdata, CL_SIZE);
+            //     memcpy(toHostAddr(0x1a8000),hmac,  CL_SIZE);
+            //     memcpy(toHostAddr(0x1a9000), imt, CL_SIZE * 3);
+            //     freopen("/dev/pts/0", "w+", stdout);
+            // }
+            // if(pkt->getAddr()==0x168e80 && curTick()==277837133500)
+            // {
+            //     freopen("/dev/pts/1", "w+", stdout);
+            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
+            //     CME::dump("secret", host_addr - offset+48, CL_SIZE);
+            //     printf("(%s)\n",host_addr-offset+48);
+            //     CME::dump("tamper",(uint8_t *)"so you are attacked!^_^\n",25);
+            //     printf("so you are attacked!^_^\n");
+            //     freopen("/dev/pts/0", "w+", stdout);
+            //     memcpy(host_addr-offset+48,"so you are attacked!^_^\n\0\0\0\0\0\0\0\0",33);
+            // }
+            // if(pkt->getAddr()==0x168e80 && curTick()==277837133500)
+            // {
+            //     freopen("/dev/pts/1", "w+", stdout);
+            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
+            //     CME::dump("secret", host_addr - offset+48, CL_SIZE);
+            //     printf("(%s)\n",host_addr-offset+48);
+            //     CME::dump("tamper",(uint8_t *)"so you are attacked!^_^\n",25);
+            //     printf("so you are attacked!^_^\n");
+            //     freopen("/dev/pts/0", "w+", stdout);
+            //     memcpy(host_addr-offset+48,"so you are attacked!^_^\n\0\0\0\0\0\0\0\0",33);
+            // }
             memcpy(dataCpoy, host_addr - offset, CL_SIZE);// 先取出CL_SIZE对齐的内存数据
-            // if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有contextID
-            // {// read 函数会将解密后的结果放在dataCpoy中
-                // if(curTick() == 277980562000)
-                // {
-                //     printf("catch packet: %s\n",pkt->print().c_str());
-                //     printf("vaddr = %lx offset = %lx paddr=%lx ,reqsize=%d, psize=%d\n", pkt->req->getVaddr(), offset, pkt->getAddr() ,pkt->req->getSize(),pkt->getSize());
-                // }
-                // if(pkt->req->hasVaddr())
-                //     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->read(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-
+            // if(pkt->getAddr()==0x16de80)
+            // {
+            //     freopen("/dev/pts/1","w+",stdout);
+            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
+            //     CME::dump("intercept key", dataCpoy, CL_SIZE);
+            //     freopen("/dev/pts/0","w+",stdout);
+            // }
             if(rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
             {
                 Addr vaddr = rpTable[pkt->getAddr() - offset] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
@@ -471,17 +514,7 @@ AbstractMemory::access(PacketPtr pkt)
                 for (int i = 0; i < num;i++)
                     sDMmanagers[i]->read(pkt, dataCpoy, vaddr);
             }  
-            // }
             pkt->setData(dataCpoy + offset);// 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
-            // printf("read,%ld,%d\n",pkt->getAddr(),pkt->getSize());
-            // if(pkt->getAddr() >= 0x20000000000)
-            // {
-            //     printf("[%ld]abstrace_mem read[%lx:%lx]", curTick(), pkt->getAddr(), pkt->getAddr() + pkt->getSize() - 1);
-            //     uint8_t *p = pkt->getPtr<uint8_t>();
-            //     for (int i = 0; i < pkt->getSize(); i++)
-            //         printf("%02x ", *(p + i));
-            //     printf("\n");
-            // }
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -497,26 +530,11 @@ AbstractMemory::access(PacketPtr pkt)
     } else if (pkt->isWrite()) {
         if (writeOK(pkt)) {
             if (pmemAddr) {
-                // yqy mark
-                // 这里应该是写入到(虚拟机分配给gem5的空间)gem5模拟的物理内存中
                 assert(pkt->getSize() <= CL_SIZE);
                 memcpy(dataCpoy, host_addr - offset, CL_SIZE);
                 if(offset > 0)
                     assert(pkt->getSize() < CL_SIZE && "over 2 CL");
                 pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());// 这里不会破坏密文,因为write函数中会重新读取所在的半页数据
-                // if (pkt->req->hasContextId()) // 注意这里假设所有涉及sdm space内部的访存的pkt都带有vaddr
-                // {
-                //     system()->threads[pkt->req->contextId()]->getProcessPtr()->sDMmanager->write(pkt, dataCpoy, pkt->req->getVaddr() - offset);
-                // }
-                // else
-                // {
-                    // uint32_t num = sDMmanagers.size();
-                    // Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
-                    // for (int i = 0; i < num;i++)
-                    // {
-                    //     sDMmanagers[i]->write(pkt, dataCpoy, vaddr & CL_ALIGN_MASK);
-                    // }
-
                 if (rpTable.count((pkt->getAddr() - offset) & PAGE_ALIGN_MASK))
                 {
                     uint32_t num = sDMmanagers.size();
@@ -524,10 +542,8 @@ AbstractMemory::access(PacketPtr pkt)
                     for (int i = 0; i < num;i++)
                         sDMmanagers[i]->write(pkt, dataCpoy, vaddr);
                 }
-                // }
                 // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
                 memcpy(host_addr - offset, dataCpoy, CL_SIZE);
-                // printf("write,%ld,%d\n",pkt->getAddr(),pkt->getSize());
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }

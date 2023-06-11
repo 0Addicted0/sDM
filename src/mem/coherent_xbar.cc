@@ -207,6 +207,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     // set the packet header and payload delay
     calcPacketTiming(pkt, xbar_delay);
 
+    // pkt->payloadDelay += 4000;
     // determine how long to be crossbar layer is busy
     Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
 

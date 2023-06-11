@@ -11,5 +11,6 @@
 
 using namespace std;
 
+void welc();
 void *sdmmalloc(size_t len);
 bool sdmfree(void *);

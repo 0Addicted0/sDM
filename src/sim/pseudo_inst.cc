@@ -643,7 +643,7 @@ namespace gem5
         {
             Process *process = tc->getProcessPtr();
             // uint64_t pid = process->pid();
-            process->sDMmanager->keypathdown();
+            // process->sDMmanager->keypathdown();
         }
 
     } // namespace pseudo_inst

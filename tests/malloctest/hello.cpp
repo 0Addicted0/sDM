@@ -1,6 +1,6 @@
 #include <stdio.h>
-
+#include "gem5/sdmmalloc.h"
 int main(){
-    printf("hello c\n");
+    welc();
     return 0;
 }

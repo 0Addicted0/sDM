@@ -185,7 +185,7 @@ namespace gem5
             sdm_iitNodePagePtrPagePtr iITPtrPagePtr; // 完整性树页指针集指针
             int iit_skip;                            // iit数据对表最大skip大小
             // 52B(43B)->64B
-            // iit_root Root;                        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
+            iit_Node Root;                        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
             sdm_hashKey hash_key; // 当前空间完整性树密钥 16B
             sdm_CMEKey cme_key;   // 当前空间内存加密密钥 32B
             /**
@@ -343,7 +343,7 @@ namespace gem5
                              uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
             void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, 
-                std::vector<phy_space_block> r_iit_phy_list,uint32_t h);
+                std::vector<phy_space_block> r_iit_phy_list,uint32_t h, sdm_space& sp);
 
             sDMmanager(const sDMmanagerParams &p);
             sdmIDtype isContained(Addr vaddr);

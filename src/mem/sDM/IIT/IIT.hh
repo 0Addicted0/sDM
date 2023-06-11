@@ -379,7 +379,6 @@ namespace gem5
              * @attention 结果计数器格式为中间节点
              * @brief 求当前节点的和,并转换为mid类型的节点写入指针参数中
              */
-            // psj:就整个函数都有点迷惑，我觉得应该是下面这样的
             void sum(int iit_node_type, CL_Counter container, int dest_iit_node_type = IIT_MID_ARITY)
             {
                 iit_major_counter major = abstract_major(iit_node_type);
@@ -407,7 +406,7 @@ namespace gem5
                 else
                 {
                     for (int i = 0; i < IIT_MID_ARITY; i++)
-                        minor += ((leafNode[i]) & IIT_MID_MINOR_RESERVED_MASK);
+                        minor += ((midNode[i]) & IIT_MID_MINOR_RESERVED_MASK);
                 }
                 // switch (dest_iit_node_type)
                 // {
