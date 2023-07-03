@@ -193,39 +193,27 @@ namespace gem5
             }
 #endif
             int Mlen = (inputLen + counterLen + sizeof(sDM::Addr));
-            // printf("CME:Mlen:%d\n", Mlen);
             int PaddingLen = (SM3_SIZE - (Mlen % SM3_SIZE)) % SM3_SIZE;
-            // printf("CME:PaddingLen:%d\n", PaddingLen);
             uint8_t V[SM3_PADLEN + Mlen + PaddingLen], p1[SM3_SIZE];
             memset(V, 0, sizeof(V));
             memset(p1, 0, sizeof(p1));
-            // CMEdump("CME:V_0:", V, SM3_PADLEN + Mlen + PaddingLen);
-            // CMEdump("CME:hmac_key_0:", hamc_key, 32);
             GETIPAD(V, hamc_key);
-            // CMEdump("CME:V:", V, SM3_PADLEN + Mlen + PaddingLen);
-            // CMEdump("CME:hmac_key:", hamc_key, 32);
             //  (ipad ^ K)||(M[input||counter||addr]|padding|)
             memcpy(V + SM3_PADLEN, input, inputLen);
             memcpy(V + SM3_PADLEN + inputLen, counter, counterLen);
             memcpy(V + SM3_PADLEN + inputLen + counterLen, &paddr, sizeof(sDM::Addr));
-            // CMEdump("CME:3memcpy_V:", V, SM3_PADLEN + Mlen + PaddingLen);
             //  H((ipad ^ K)||M)
             sm3::SM3_256(V, SM3_PADLEN + Mlen + PaddingLen, p1); // P1= H((ipad ^ K)||M)
-            // CMEdump("CME:sm3_256_V:", V, SM3_PADLEN + Mlen + PaddingLen);
-            // CMEdump("CME:p1:", p1, 32);
             //  (opad ^ K) || H((ipad ^ K)||M)
             GETOPAD(V, hamc_key);
             memcpy(V + SM3_SIZE, p1, SM3_SIZE);
             // H((opad ^ K) || H((ipad ^ K)||M)
             sm3::SM3_256(V, SM3_SIZE + SM3_SIZE, p1);
-            // CMEdump("CME:finnal_p1:", p1, 32);
             //  cut
             memcpy(hmac, p1, hmacLen);
 #ifdef HMAC_debug
             if (inputLen == 64)
-            {
                 dump("HMAC", hmac, hmacLen);
-            }
 #endif
         }
     }

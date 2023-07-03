@@ -12,7 +12,7 @@ int main()
     for (int i = 0; i < 16; i++)
         plaint[i] = i;
     // gem5::CME::dump("plaint",plaint, CL_SIZE);
-    uint8_t cipher[SM4_SIZE] = {0x00};
+    // uint8_t cipher[SM4_SIZE] = {0x00};
     gem5::sDM::CL_Counter cl;
     uint8_t ckey[SM4_KEY_SIZE] = {0};
     memset(ckey, 0, sizeof(ckey));

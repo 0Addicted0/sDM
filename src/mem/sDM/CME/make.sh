@@ -1,0 +1,1 @@
+g++ test.cpp CME.cpp ../alg_src/sm4/SM4_ENC.cpp ../alg_src/sm3/SM3.cpp -o test.o

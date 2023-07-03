@@ -544,6 +544,8 @@ AbstractMemory::access(PacketPtr pkt)
                 }
                 // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
                 memcpy(host_addr - offset, dataCpoy, CL_SIZE);
+                // 这里为了检查MemoryAccess调试文件加密效果
+                pkt->setDataFromBlock(dataCpoy + offset, pkt->getSize());
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }
@@ -564,7 +566,6 @@ AbstractMemory::access(PacketPtr pkt)
 void
 AbstractMemory::functionalAccess(PacketPtr pkt)
 {
-    // printf("[%ld]Get funcitonalAccess%s\n",curTick(),pkt->print().c_str());
     assert(pkt->getAddrRange().isSubset(range));
 
     uint8_t *host_addr = toHostAddr(pkt->getAddr());
@@ -572,24 +573,12 @@ AbstractMemory::functionalAccess(PacketPtr pkt)
     if (pkt->isRead()) {
         if (pmemAddr) {
             pkt->setData(host_addr);
-            // yqy test
-            // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
-            // {
-            //     printf("[%ld]funcitonal %s(READ) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
-            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
-            // }
         }
         TRACE_PACKET("Read");
         pkt->makeResponse();
     } else if (pkt->isWrite()) {
         if (pmemAddr) {
             pkt->writeData(host_addr);
-            // yqy test
-            // if((pkt->getAddr()>= 0x1e7380 && pkt->getAddr()<= 0x1e7fe0) && (pkt->getAddr() >= 0x1ea000 && pkt->getAddr() <= 0x1eafe0) && (pkt->getAddr() >= 0x1e8000 && pkt->getAddr() <= 0x1e8380)) // 该请求一定不来自程序本身
-            // {
-            //     printf("[%ld]funcitonal %s(WRITE) %ld\n", curTick(), pkt->print().c_str(),pkt->getSize());
-            //     // printf(" read[%lx]\n", pkt->req->getVaddr());
-            // }
         }
         TRACE_PACKET("Write");
         pkt->makeResponse();

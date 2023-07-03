@@ -84,10 +84,6 @@ namespace gem5
             waitAddr = 0;
             sdm_space_cnt = 0;
             sdm_table.assign(1, sdm_space());
-            // printf("sDM.cpp process=%p,sDMmanager=%p,requestorId=%d\n", process, this, _requestorId);
-            // std::cout << "!!sDMmanager!!\n"
-            //   << "requestorID"
-            //   << " " << _requestorId << std::endl;
         }
         /**
          * @author psj
@@ -120,16 +116,13 @@ namespace gem5
             // 当has_recv为true时，表示收到响应packet，在recvTimingResp函数中将收到响应pkt复制给pkt_recv
 
             // pkt->writeDataToBlock(container, byte_size);
-            if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
-            {
+            if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr)) {
                 memcpy(container, sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), byte_size);
             }
-            else
-            {
+            else{
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
-                memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
+                // memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
             }
-
             // waitAddr = 0;
             // delete pkt;
             return;
@@ -154,14 +147,12 @@ namespace gem5
             // pkt->setsDMflag();
             // maxTick = 0;
             // memPort.sendTimingReq(pkt); //  packet mem[i]->gem5MemPtr->[i];...
-            if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
-            {
+            if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr)){
                 memcpy(sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), data, byte_size);
             }
-            else
-            {
+            else{
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
-                memcpy(sDMdrams[local_pool_id]->toHostAddr(gem5_addr), data, byte_size);
+                // memcpy(sDMdrams[local_pool_id]->toHostAddr(gem5_addr), data, byte_size);
             }
             // printf("write2mem over \n");
             return;
@@ -179,12 +170,10 @@ namespace gem5
             // assert((byte_size % CL_SIZE == 0) && "write2Mem: byte_size is aligned by CL_SIZE");
             // divide into CL_SIZE
             uint32_t num = byte_size / CL_SIZE;
-            if (!num)
-            {
+            if (!num){
                 write2gem5(byte_size, data, gem5_addr);
             }
-            for (uint32_t i = 0; i < num; i++)
-            {
+            for (uint32_t i = 0; i < num; i++){
                 write2gem5(CL_SIZE, data + i * CL_SIZE, gem5_addr + i * CL_SIZE);
             }
         }
@@ -201,10 +190,8 @@ namespace gem5
         {
             Addr start = mem_pools->allocPhysPages(npages, pool_id); // 调用gem5物理内存分配函数直接分配
             // 由于gem5本身没有处理不连续的地址情况,所以一定是连续的
-            if (start == POOL_EXHAUSTED)
-            {
+            if (start == POOL_EXHAUSTED){// 本地内存耗尽
                 // printf("pool exhausted\n");
-                // 本地内存耗尽
                 return false;
             }
             phy_list.push_back({start, npages});
@@ -224,8 +211,7 @@ namespace gem5
         sdmIDtype sDMmanager::isContained(Addr vaddr)
         {
             vaddr &= PAGE_ALIGN_MASK;
-            if (sdm_paddr2id.size() == 0)
-            {
+            if (sdm_paddr2id.size() == 0){
                 return 0;
             }
             auto it = sdm_paddr2id.lower_bound(vaddr);
@@ -265,64 +251,64 @@ namespace gem5
          * |  |  |  |  |  | <y,5,~> ...
          * ----------------
          */
-        Addr sDMmanager::find(Addr head, Addr offset, int skip, int known, int &pnum)
+        Addr sDMmanager::find(Addr head, Addr offset, int skip, int known, int& pnum)
         {
-            local_jmp rbound;
-            sdm_pagePtrPairPtr rboundp = (sdm_pagePtrPair *)&rbound; // 这里两个结构体大小相同,因此可以共用一下
-            bool flag = false;                                       // rbound是否已经通过内存得到
-            if (!known)                                              // 首次进入不确定是否在该连续段中
-            {
-                // 获取最后一个连续页的最后一个数据对的范围
-                read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
-                flag = true;
-                if ((rbound.maxBound) >= offset)
-                    known = 1;
-                else
-                    known = 2;
-            }
-            if (known == 1) // 在连续页的范围内
-            {
-                if (!flag)
-                    read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
-                // 在当前连续段内二分找出地址所在页
-                int l = -1;
-                int r = rbound.con;
-                while (r - l > 1) // 二分第一个末数据对地址范围大于offset的本地页
-                {
-                    int mid = (r + l) >> 1;
-                    // 读取页的最后一个数据对(本身就需要减去自身的大小),还要除去local_jmp
-                    // 注意因此减去PAIR_SIZE+sizeof(local_jmp)
-                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + mid * PAGE_SIZE + PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp));
-                    if ((rboundp->pnum + rboundp->cnum) * PAGE_SIZE >= offset)
-                        r = mid;
-                    else
-                        l = mid;
-                }
-                // 在第r页内二分出数据对
-                head += r * PAGE_SIZE;
-                //  [skip/2,...,PAGE_SIZE/PAIR_SIZE-1]
-                // ^                                  ^
-                // i                                  j
-                // l = skip / 2 - 1;
-                l = skip - 1;
-                r = PAGE_SIZE / PAIR_SIZE;
-                while (r - l > 1)
-                {
-                    int mid = (r + l) >> 1;
-                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (mid * PAIR_SIZE));
-                    if ((rboundp->pnum + rboundp->cnum) * PAGE_SIZE > offset || // debug >= -> >
-                        (rboundp->cnum = -1 && rboundp->cnum == rboundp->pnum)) // 0xffffffffffffffff
-                        r = mid;
-                    else
-                        l = mid;
-                }
-                // 在第r个数据对中
-                // 在数据对中找到所在页
-                head = rboundp->curPageAddr;
-                head += offset - rboundp->pnum * PAGE_SIZE;
-                pnum = rboundp->pnum + (offset - rboundp->pnum * PAGE_SIZE) / PAGE_SIZE;
-                return head;
-            }
+			local_jmp rbound;
+			sdm_pagePtrPairPtr rboundp = (sdm_pagePtrPair *)&rbound; // 这里两个结构体大小相同,因此可以共用一下
+			bool flag = false;                                       // rbound是否已经通过内存得到
+			if (!known)                                              // 首次进入不确定是否在该连续段中
+			{
+				// 获取最后一个连续页的最后一个数据对的范围
+				read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
+				flag = true;
+				if ((rbound.maxBound) > offset)
+					known = 1;
+				else
+					known = 2;
+			}
+			if (known == 1) // 在连续页的范围内
+			{
+				if (!flag)
+					read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + PAGE_SIZE - sizeof(local_jmp));
+				// 在当前连续段内二分找出地址所在页
+				int l = -1;
+				int r = rbound.con;
+				while (r - l > 1) // 二分第一个末数据对地址范围大于offset的本地页
+				{
+					int mid = (r + l) >> 1;
+					// 读取页的最后一个数据对(本身就需要减去自身的大小),还要除去local_jmp
+					// 注意因此减去PAIR_SIZE+sizeof(local_jmp)
+					read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + mid * PAGE_SIZE + PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp));
+					if ((rboundp->pnum + rboundp->cnum) * PAGE_SIZE >= offset)
+						r = mid;
+					else
+						l = mid;
+				}
+				// 在第r页内二分出数据对
+				head += r * PAGE_SIZE;
+                //  [skip,...,PAGE_SIZE/PAIR_SIZE-1]
+                // ^                                ^
+                // i                                j
+				l = skip - 1;
+				r = PAGE_SIZE / PAIR_SIZE;
+				while (r - l > 1)
+				{
+					int mid = (r + l) >> 1;
+					read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (mid * PAIR_SIZE));
+					if ((rboundp->pnum + rboundp->cnum) * PAGE_SIZE > offset || // debug >= -> >
+						(rboundp->cnum == -1 && rboundp->cnum == rboundp->pnum)) // 0xffffffffffffffff
+						r = mid;
+					else
+						l = mid;
+				}
+				// 在第r个数据对中
+				// 在数据对中找到所在页
+				read4Mem(PAIR_SIZE, (uint8_t*)&rbound, head + (r * PAIR_SIZE));
+				head = rboundp->curPageAddr;
+				head += offset - rboundp->pnum * PAGE_SIZE;
+				pnum = rboundp->pnum + (offset - rboundp->pnum * PAGE_SIZE) / PAGE_SIZE;
+				return head;
+			}
             else
             {
                 // 本地跳跃页查找
@@ -331,11 +317,12 @@ namespace gem5
                 // 从本地内存中读取skip list
                 read4Mem(sizeof(skip_jmp) * skip, (uint8_t *)jmps, head);
                 int i = skip - 1;
-                while (jmps[i].maxBound > offset && i > 0)
+                while ((jmps[i].maxBound > offset) && (i > 0))
                     i--;
                 return find(jmps[i].next, offset, skip, 0, pnum);
             }
         }
+
         /**
          * @author yqy
          * @brief 查找关键路径上节点的远端物理地址
@@ -439,9 +426,6 @@ namespace gem5
                     mem[cur].pair[skip + i].curPageAddr = remote_phy_list[cur_pair].start;
                     mem[cur].pair[skip + i].cnum = remote_phy_list[cur_pair].npages;
                     mem[cur].pair[skip + i].pnum = logic_npages;
-                    //        mem[cur].pair[skip + i].curPageAddr,
-                    //        mem[cur].pair[skip + i].cnum,
-                    //        mem[cur].pair[skip + i].pnum);
                     logic_npages += remote_phy_list[cur_pair].npages; // 累计逻辑空间大小
                     cur_pair++;
                     if (cur_pair >= remote_phy_list.size())
@@ -450,8 +434,7 @@ namespace gem5
                 mem[cur].cur_segMax.con = local_phy_list[cur_seg].npages - cur_k + 1;
                 cur_k++;
                 // 检查l_hmac_phy_list[cur_seg]起始的连续页是否用完
-                if (cur_k <= local_phy_list[cur_seg].npages) // 还有连续页,最后一个页面不可能还存在连续段,这里一定不会越界
-                {
+                if (cur_k <= local_phy_list[cur_seg].npages){ // 还有连续页,最后一个页面不可能还存在连续段,这里一定不会越界
                     ptrPagePtr[cur + 1] = ptrPagePtr[cur] + PAGE_SIZE; // 指向下一个连续的本地页
                 }
                 else
@@ -472,7 +455,7 @@ namespace gem5
                     }
                 }
                 // 先写入该页面的pair数据对到gem5内存
-                // 改为统一写入
+                // 下面的分次写入改为后面的统一写入
                 // write2Mem(PAGE_SIZE - PAIR_SIZE - skip * sizeof(skip_jmp), (uint8_t *)&(mem[cur].pair[skip]), ptrPagePtr[cur] + sizeof(skip_jmp) * skip);
                 cur++;
             }
@@ -485,12 +468,11 @@ namespace gem5
                         continue;
                     mem[seg_start_num[i]].jmp[j].maxBound = mem[seg_start_num[i + (1 << j)]].cur_segMax.maxBound;
                 }
-                // 改为统一写入
+                // 下面的分次写入改为后面的统一写入
                 // write2Mem(sizeof(skip_jmp) * skip, (uint8_t *)&mem[i], ptrPagePtr[i]); // 重写这些部分
             }
             // 分多次写入 -> 统一写入
-            for (int i = 0; i < lnpages; i++)
-            {
+            for (int i = 0; i < lnpages; i++){
                 write2Mem(PAGE_SIZE, (uint8_t *)&mem[i], ptrPagePtr[i]);
             }
         }
@@ -541,10 +523,6 @@ namespace gem5
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (PAGE_SIZE >> 1));
-                // read4Mem(PAGE_SIZE >> 1, dataptr, paddr); // 被加密的数据
-
-                // iit_NodePtr counter = new iit_Node(); // new 会将结构体内部置0
-
                 CME::sDM_HMAC(encrypteddata + i * (PAGE_SIZE >> 1), PAGE_SIZE >> 1, hkey, paddr, (uint8_t *)(&counter),
                               sizeof(iit_Node), hmac + (i & 1) * SM3_SIZE, SM3_SIZE); // 计算hash值，存入hmac
 
@@ -586,25 +564,18 @@ namespace gem5
                 while (curlayernodenum > 0)
                 {
                     i = (curpPageAddrstart - hpageAddr) / CL_SIZE; // 缓存行索引
-                    // 算hash_tag
-                    // iit_hash_tag hash_tag;
                     uint8_t nodetype;
-                    if (leaf)
-                    { // 叶节点
+                    if (leaf){ // 叶节点
                         nodetype = IIT_LEAF_TYPE;
-                        // hpageAddr + i* CL_SIZE 是所在缓存行的首地址
                     }
-                    else
-                    { // 中间节点
+                    else{ // 中间节点
                         nodetype = IIT_MID_TYPE;
                     }
                     node.init(nodetype, hkey, hpageAddr + i * CL_SIZE);
-                    // iit_hash_tag hash_tag_test = node.abstract_hash_tag(nodetype);
                     // 写入物理地址
                     write2Mem(sizeof(iit_Node), (uint8_t *)&node, curpPageAddrstart);
                     curpPageAddrstart += sizeof(_iit_Node);
-                    if (curpPageAddrstart >= curpPageAddrend)
-                    { // 页面可用空间耗尽
+                    if (curpPageAddrstart >= curpPageAddrend){ // 页面可用空间耗尽
                         auto block = r_iit_phy_list[iitpPageindex++];
                         curpPageAddrstart = block.start;
                         curpPageAddrend = block.npages * PAGE_SIZE + curpPageAddrstart;
@@ -614,9 +585,7 @@ namespace gem5
                 leaf = false;
                 leaf_num = ceil(leaf_num, IIT_MID_ARITY); // 下一层的结点数
                 if(curh==h)
-                {
                     memcpy((uint8_t *)(&sp.Root), (uint8_t*)(&node), sizeof(iit_Node));
-                }
                 curh++;
             }
             printf("[%ld]in sdm_init iMT done\n", curTick());
@@ -648,7 +617,6 @@ namespace gem5
             sdm_space sp;
             // 1. 计算data大小
             uint64_t data_size = data_byte_size;
-            // data_size *= PAGE_SIZE;
             // 检查申请的虚拟空间是否已经存在于其他space中
             auto aft = sdm_paddr2id.lower_bound((Addr)(vaddr + data_size));
             if (sdm_paddr2id.size() != 0) // 第一次不用检查，一定没有重复
@@ -753,7 +721,6 @@ namespace gem5
             hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
             // 与存储值比较
             int pnum = 0;
-            // rva /= SDM_HMAC_ZOOM;
             // rva是数据的虚拟空间的相对偏移，需按半页转换成hmac存储空间的相对偏移
             *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, (rva / (PAGE_SIZE >> 1)) * SM3_SIZE, sdm_table[id].hmac_skip, 0, pnum);
             sdm_HMAC stored_hmac;
@@ -808,7 +775,6 @@ namespace gem5
                     verified = counter_cmp(cl, f_cl);
                     assert(verified && "f_cl!=cl");
                 }
-                // iit_hash_tag hash_tag = ((iit_Node *)(keyPathNode + i * sizeof(iit_Node)))->abstract_hash_tag(type);
                 iit_hash_tag hash_tag = keyPathNode[i].abstract_hash_tag(type);
                 iit_hash_tag chash_tag = keyPathNode[i].get_hash_tag(type, hash_key, keyPathAddr[i]);
                 // 比较计算值和存储值
@@ -822,7 +788,11 @@ namespace gem5
             }
             if(verified)
             {
-                verified = (memcpy((uint8_t *)(&sdm_table[id].Root), (uint8_t *)(&keyPathNode[*h-1]), sizeof(iit_Node)) == 0);
+                verified = (memcmp((uint8_t *)(&sdm_table[id].Root), (uint8_t *)(&keyPathNode[*h-1]), sizeof(iit_Node)) == 0);
+                if( !verified )
+                {
+                    printf("on chip root:%ld, dram root:%ld\n",sdm_table[id].Root,keyPathNode[*h-1]);
+                }
                 assert(verified && "iMT Root verify failed");
             }
             // printf("iit verify done\n");
@@ -904,9 +874,9 @@ namespace gem5
             Addr hmacAddr;                    // 对应的hmac在远端的物理地址
             uint8_t hpg_data[PAGE_SIZE >> 1]; // 在函数verify调用的hmac-verify函数中会读取所在的半页密态内存,需要在verify的调用者中准备存储空间
             bool verified = verify(pktVAddr, hpg_data, id, &rva, &h, keyPathAddr, keyPathNode, &hmacAddr, hash_key);
-            // #ifndef SDMDEBUG
+#ifndef SDMDEBUG
             assert(verified && "verify failed before write");
-            // #endif
+#endif
             uint32_t before_mod_cur_k = rva / CL_SIZE;
             uint32_t cur_k = before_mod_cur_k & (IIT_LEAF_ARITY - 1);
             int node_type = IIT_LEAF_TYPE;
