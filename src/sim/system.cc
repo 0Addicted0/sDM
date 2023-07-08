@@ -191,7 +191,7 @@ namespace gem5
                  name());
 
         //  yqy mark
-        printf("system[%s] construceted!!\n",name().c_str());
+        printf("system[%s] construceted\n",name().c_str());
         workload->setSystem(this);
 
         // add self to global system list

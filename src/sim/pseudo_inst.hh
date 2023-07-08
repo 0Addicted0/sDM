@@ -96,7 +96,7 @@ namespace gem5
     void togglesync(ThreadContext *tc);
     void triggerWorkloadEvent(ThreadContext *tc);
     bool sdm_poster(ThreadContext *tc, uint64_t vaddr, size_t size);
-    void downkeypath(ThreadContext *tc);
+    bool sdm_puller(ThreadContext *tc, uint64_t vaddr);
     /**
      * Execute a decoded M5 pseudo instruction
      *
@@ -220,7 +220,7 @@ namespace gem5
         result = invokeSimcall<ABI, store_ret>(tc, sdm_poster);
         return true;
       case M5OP_RESERVED2:
-        invokeSimcall<ABI>(tc, downkeypath);
+        result = invokeSimcall<ABI, store_ret>(tc, sdm_puller);
         return true;
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:

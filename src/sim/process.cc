@@ -70,6 +70,7 @@
 #include "sim/system.hh"
 
 std::vector<gem5::sDM::sDMmanager *> sDMmanagers;
+bool sDMenable = false;
 
 namespace gem5
 {
@@ -170,15 +171,14 @@ namespace gem5
             loader::debugSymbolTable = objFile->symtab();
 
         //  yqy mark
-        printf("%s construct!!\n", progName());
-        printf("process.cc pool: ");
+        printf("process[%s] construct\n", progName());
+        printf("available pool id: ");
         for (int pool_id : pool_ids)
             printf("%d ", pool_id);
         printf("\n");
 
         // 实例化sDMmanager
         // sDMmanagerParams p;
-
         // 保证portID唯一性 
         // p.name = "system.sDMmanager" + std::string(progName());
         // p.eventq_index = 0;
@@ -187,10 +187,14 @@ namespace gem5
         // sDMmanager->remote_pool_id = pool_ids[0];
         // 默认将可用池的第二个视作本地内存
         // sDMmanager->local_pool_id = pool_ids[1];
-        sDMmanager->mem_pools = &(this->seWorkload->memPools);
-        sDMmanager->process = this;
-        printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
-        sDMmanagers.push_back(sDMmanager);
+        if(sDMmanager)
+        {
+            sDMenable = true;
+            sDMmanager->mem_pools = &(this->seWorkload->memPools);
+            sDMmanager->process = this;
+            // printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
+            sDMmanagers.push_back(sDMmanager);
+        }
         // system->proc.push_back(this);
     }
 

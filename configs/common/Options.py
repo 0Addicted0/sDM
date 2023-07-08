@@ -760,6 +760,46 @@ def addSEOptions(parser):
         default="",
         help="Specify the available mem pool id for each process.",
     )
+    parser.add_argument(
+        "--sDMenable",
+        default=False,
+        help="Enable sDMmanager.",
+    )
+    parser.add_argument(
+        "--hash_lat",
+        default=0,
+        help="Specify the sDMmanger hash latency(Cycles).",
+    )
+    parser.add_argument(
+        "--enc_lat",
+        default=0,
+        help="Specify the sDMmanger enc/dec latency(Cycles).",
+    )
+    parser.add_argument(
+        "--onchip_cache_size",
+        default=0,
+        help="Specify the onchipCache line number.",
+    )
+    parser.add_argument(
+        "--onchip_cache_lat",
+        default=0,
+        help="Specify the sDMmanager onchip cache access latency(Cycles).",
+    )
+    parser.add_argument(
+        "--dram_cache_size",
+        default=0,
+        help="Specify the dramCache line number.",
+    )
+    parser.add_argument(
+        "--fast_mode",
+        default=0,
+        help="To speed up secure simulation.",
+    )
+    # parser.add_argument(
+    #     "--dramCache_lat",
+    #     default=0,
+    #     help="Specify the sDMmanager dram cache access latency(Cycles).",
+    # )
 
 
 def addFSOptions(parser):

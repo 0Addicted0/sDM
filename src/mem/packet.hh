@@ -359,23 +359,15 @@ namespace gem5
             // through express snoop flag
             BLOCK_CACHED = 0x00010000,
 
-            SDM_FLGA = 0x00020000
+            // Symbol of sDMmanager Read/Write
+            SDM_RAISE = 0x8000000,
+
         };
 
         Flags flags;
 
     public:
-        void setsDMflag(){
-            flags.set(SDM_FLGA);
-        }
-
-        bool checksDMflag(){
-            return flags.isSet(SDM_FLGA);
-        }
-
-        void unsetsDMflag(){
-            flags.clear(SDM_FLGA);
-        }
+        
         typedef MemCmd::Command Command;
 
         /// The command field of the packet.
@@ -770,7 +762,9 @@ namespace gem5
         void setBlockCached() { flags.set(BLOCK_CACHED); }
         bool isBlockCached() const { return flags.isSet(BLOCK_CACHED); }
         void clearBlockCached() { flags.clear(BLOCK_CACHED); }
-
+        // set sDMflag
+        void setSDMRaise() {flags.set(SDM_RAISE); }
+        bool isSDMRaise() const {return flags.isSet(SDM_RAISE); }
         /**
          * QoS Value getter
          * Returns 0 if QoS value was never set (constructor default).

@@ -239,10 +239,11 @@ def config_mem(options, system):
                 mem_ctrl = dram_intf.controller()
 
                 if(range_iter == 1):
-                    mem_ctrl.static_frontend_latency = "400ns"
-                    mem_ctrl.static_backend_latency = "400ns"
-                    # print("yes\n")
-
+                    # the first iteration is remote memory
+                    # here we set the latency of the memory controller
+                    # print("try to add remote mem lat")
+                    mem_ctrl.static_frontend_latency = "200ns"
+                    mem_ctrl.static_backend_latency = "200ns"
 
                 mem_ctrls.append(mem_ctrl)
 

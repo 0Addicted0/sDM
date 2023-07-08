@@ -53,6 +53,7 @@
 
 std::vector<gem5::memory::AbstractMemory *> sDMdrams;
 extern std::vector<gem5::sDM::sDMmanager *> sDMmanagers;
+extern bool sDMenable;
 
 namespace gem5
 {
@@ -75,7 +76,7 @@ namespace memory
                  range.to_string());
         //  yqy mark
         sDMdrams.push_back(this);
-        printf("AbstractMemory %s constructed!!\n", range.to_string().c_str());
+        printf("AbstractMemory %s constructed\n", range.to_string().c_str());
 }
 
 void
@@ -423,7 +424,8 @@ AbstractMemory::access(PacketPtr pkt)
             pkt->writeData(&overwrite_val[0]);
             pkt->setData(host_addr);
 
-            if (pkt->req->isCondSwap()) {
+            if (pkt->req->isCondSwap())
+            {
                 if (pkt->getSize() == sizeof(uint64_t)) {
                     condition_val64 = pkt->req->getExtraData();
                     overwrite_mem = !std::memcmp(&condition_val64, host_addr,
@@ -452,7 +454,6 @@ AbstractMemory::access(PacketPtr pkt)
             trackLoadLocked(pkt);
         }
         if (pmemAddr) {
-            
             // if(pkt->req->hasVaddr() && pkt->req->getVaddr()==0x19eb0)
             //     printf("paddr=%lx\n", pkt->getAddr());
             // if(pkt->getAddr()==0x1a7000 && curTick()==278427797500)
@@ -500,21 +501,38 @@ AbstractMemory::access(PacketPtr pkt)
             //     memcpy(host_addr-offset+48,"so you are attacked!^_^\n\0\0\0\0\0\0\0\0",33);
             // }
             memcpy(dataCpoy, host_addr - offset, CL_SIZE);// 先取出CL_SIZE对齐的内存数据
-            // if(pkt->getAddr()==0x16de80)
-            // {
-            //     freopen("/dev/pts/1","w+",stdout);
-            //     printf("[%lx:%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
-            //     CME::dump("intercept key", dataCpoy, CL_SIZE);
-            //     freopen("/dev/pts/0","w+",stdout);
-            // }
-            if(rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
+            
+            if(sDMenable && (pkt->isSDMRaise() == false))// 如果sDMmanager启用
             {
-                Addr vaddr = rpTable[pkt->getAddr() - offset] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
-                uint32_t num = sDMmanagers.size();
-                for (int i = 0; i < num;i++)
-                    sDMmanagers[i]->read(pkt, dataCpoy, vaddr);
-            }  
+                if(sDM::rpTable.count((pkt->getAddr() - offset)&PAGE_ALIGN_MASK))
+                {
+                    // uint64_t pid = system()->threads[pkt->req->contextId()]->getProcessPtr()->pid(); // 获取pid
+                    auto pr = sDM::rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK];
+                    Addr vaddr = pr.second + ((pkt->getAddr() - offset) & (~PAGE_ALIGN_MASK)); // 切换为虚拟地址
+                    for (int i = 0; i < sDMmanagers.size(); i++)
+                        sDMmanagers[i]->read(pr.first, pkt, dataCpoy, vaddr);
+                }  
+            }
+            // else if(pkt->isSDMRaise())// debug: 输出sDMmanger构造的pkt
+                // printf("sDM raise:%s\n",pkt->print().c_str());
+            /*
+            // 打印Gem5模拟内存中的数据(密态)
+            char cmd[256] = {0};
+            if (sDMenable && sDMinitOver)
+            {
+                sprintf(cmd, "[%ld] read(%lx)[before]\0",curTick(), pkt->getAddr());
+                CME::CMEdump(cmd, pkt->getPtr<uint8_t>(), pkt->getSize());
+            }
+            */
             pkt->setData(dataCpoy + offset);// 如果read函数没有修改dataCpoy的值,那么就相当于从内存读取
+            /*
+            // 打印写入pkt的数据
+            if(sDMenable && sDMinitOver)
+            { 
+                sprintf(cmd, "[%ld] read(%lx)[ after]\0",curTick(), pkt->getAddr());
+                CME::CMEdump(cmd, pkt->getPtr<uint8_t>(), pkt->getSize());
+            }
+            */
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
@@ -535,17 +553,38 @@ AbstractMemory::access(PacketPtr pkt)
                 if(offset > 0)
                     assert(pkt->getSize() < CL_SIZE && "over 2 CL");
                 pkt->writeDataToBlock(dataCpoy + offset, pkt->getSize());// 这里不会破坏密文,因为write函数中会重新读取所在的半页数据
-                if (rpTable.count((pkt->getAddr() - offset) & PAGE_ALIGN_MASK))
+                if (sDMenable && (pkt->isSDMRaise() == false)) // 如果sDMmanager启用
                 {
-                    uint32_t num = sDMmanagers.size();
-                    Addr vaddr = rpTable[(pkt->getAddr() - offset)&PAGE_ALIGN_MASK] + ((pkt->getAddr()-offset)&(~PAGE_ALIGN_MASK));// 切换为虚拟地址
-                    for (int i = 0; i < num;i++)
-                        sDMmanagers[i]->write(pkt, dataCpoy, vaddr);
+                    if (sDM::rpTable.count((pkt->getAddr() - offset) & PAGE_ALIGN_MASK))
+                    {
+                        auto pr = sDM::rpTable[(pkt->getAddr() - offset) & PAGE_ALIGN_MASK]; // 这里要先按页面对齐
+                        Addr vaddr =pr.second + ((pkt->getAddr() - offset) & (~PAGE_ALIGN_MASK)); // 切换为虚拟地址
+                        for (int i = 0; i < sDMmanagers.size();i++)
+                            sDMmanagers[i]->write(pr.first, pkt, dataCpoy, vaddr);
+                    }
                 }
-                // 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
-                memcpy(host_addr - offset, dataCpoy, CL_SIZE);
+                // else if(pkt->isSDMRaise()) // debug: 输出sDMmanger构造的pkt
+                    // printf("sDM raise:%s\n",pkt->print().c_str());
+                memcpy(host_addr - offset, dataCpoy, CL_SIZE);// 如果不是位于sDM空间中的内存,则相当于直接写入到内存中
+                /*
+                // 打印程序向模拟内存写入的数据
+                char cmd[256] = {0};
+                if (sDMenable && sDMinitOver)
+                {
+                    sprintf(cmd, "[%ld]write(%lx)[before]\0",curTick(), pkt->getAddr());
+                    CME::CMEdump(cmd, pkt->getPtr<uint8_t>(), pkt->getSize());
+                }
+                */
                 // 这里为了检查MemoryAccess调试文件加密效果
                 pkt->setDataFromBlock(dataCpoy + offset, pkt->getSize());
+                /*
+                // 打印加密后的数据(密态)
+                if (sDMenable && sDMinitOver)
+                {
+                    sprintf(cmd, "[%ld]write(%lx)[ after]\0",curTick(), pkt->getAddr());
+                    CME::CMEdump(cmd, pkt->getPtr<uint8_t>(), pkt->getSize());
+                }
+                */
                 DPRINTF(MemoryAccess, "%s write due to %s\n",
                         __func__, pkt->print());
             }
@@ -557,7 +596,6 @@ AbstractMemory::access(PacketPtr pkt)
     } else {
         panic("Unexpected packet %s", pkt->print());
     }
-
     if (pkt->needsResponse()) {
         pkt->makeResponse();
     }

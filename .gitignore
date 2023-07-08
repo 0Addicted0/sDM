@@ -35,3 +35,4 @@ configs/dram/lowp_sweep.cfg
 /tests/malloctest/*.o
 /src/mem/sDM/CME/*.o
 log.txt
+scons

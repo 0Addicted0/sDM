@@ -228,8 +228,8 @@ namespace gem5
                     {
                         scatter = major & ((1 << IIT_LEAF_NODE_EMB) - 1); // 每次取最低的IIT_LEAF_MID_EMB位
                         leafNode[i] = (scatter << (BYTE2BIT * sizeof(iit_leaf_minor_counter) - IIT_LEAF_NODE_EMB - IIT_LEAF_NODE_EMB)) |
-                                      (leafNode[i] & IIT_LEAF_COUNTER_RESERVED_MASK); // 嵌入到第k个unit的对应位
-                        major >>= (IIT_LEAF_NODE_EMB);                                // 丢弃已经嵌入的位
+                                      (leafNode[i] & (IIT_LEAF_MINOR_RESERVED_MASK | IIT_LEAF_NODE_HASH_TAG_MASK)); // 嵌入到第k个unit的对应位
+                        major >>= (IIT_LEAF_NODE_EMB);                                                              // 丢弃已经嵌入的位
                     }
                 }
                 else
@@ -239,8 +239,8 @@ namespace gem5
                     {
                         scatter = major & ((1 << IIT_MID_NODE_EMB) - 1); // 每次取最低的IIT_LEAF_MID_EMB位
                         midNode[i] = (scatter << (BYTE2BIT * sizeof(iit_mid_minor_counter) - IIT_MID_NODE_EMB - IIT_MID_NODE_EMB)) |
-                                     (midNode[i] & IIT_MID_COUNTER_RESERVED_MASK); // 嵌入到第k个unit的对应位
-                        major >>= (IIT_MID_NODE_EMB);                              // 丢弃已经嵌入的位
+                                     (midNode[i] & (IIT_MID_MINOR_RESERVED_MASK | IIT_MID_NODE_HASH_TAG_MASK)); // 嵌入到第k个unit的对应位
+                        major >>= (IIT_MID_NODE_EMB);                                                           // 丢弃已经嵌入的位
                     }
                 }
             }
@@ -343,7 +343,7 @@ namespace gem5
                 CL_Counter counter;
                 node_type_sanity(iit_node_type);
                 getCounter_k(iit_node_type, k, counter);
-                (*((iit_minor_counter *)counter))++;
+                (*((iit_minor_counter *)counter))++; // increase minor counter
 
                 if (iit_node_type == IIT_LEAF_TYPE)
                 {
@@ -365,10 +365,15 @@ namespace gem5
                         assert(*((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) != 0 && "Major counter overflow");
                     }
                 }
-                // if (OF)                                                                                            // 副计数器溢出
-                //     embed_major(iit_node_type, *((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])) + 1); //+1？（上面判断的时候，major不是溢出加1了吗），不知道是不是有问题
-                // 是的这里不应该再+1了
                 embed_minor_k(iit_node_type, *((iit_minor_counter *)(counter)), k);
+                // if(OF)
+                // {
+                //     // 如果溢出,提升major同时将其他minor counter也削减,降低counter消耗速度
+                //     int arity = (iit_node_type == IIT_MID_TYPE ? IIT_MID_ARITY : IIT_LEAF_ARITY);
+                //     for (int i = 0; i < arity; i++)
+                //         if(i != k) embed_minor_k(iit_node_type, 0, i);
+                // }
+                embed_major(iit_node_type, *((iit_major_counter *)(&counter[sizeof(iit_minor_counter)])));
             }
 
             // need review
@@ -434,14 +439,23 @@ namespace gem5
              * @author
              * yqy
              */
-            void print(int iit_node_type, uint32_t k)
+            void print(int iit_node_type, int k)
             {
                 node_type_sanity(iit_node_type);
                 CL_Counter counter_k;
-                getCounter_k(iit_node_type, k, counter_k);
-                uint64_t *major = (uint64_t *)(&counter_k[sizeof(iit_minor_counter)]); // 2~10B
-                uint16_t *minor = (uint16_t *)(counter_k);                             // 0~1B
-                printf("Major: %ld  |  minor: %d\n", *major, *minor);
+                int K = (iit_node_type == IIT_LEAF_TYPE) ? IIT_LEAF_ARITY : IIT_MID_ARITY;
+                printf("Counter:");
+                int minorbit = iit_node_type == IIT_LEAF_TYPE ? IIT_LEAF_MINOR_BIT_SIZE : IIT_MID_MINOR_BIT_SIZE;
+                for (int i = 0; i < std::min(K, k); i++)
+                {
+                    getCounter_k(iit_node_type, i, counter_k);
+                    uint64_t *major = (uint64_t *)(&counter_k[sizeof(iit_minor_counter)]); // 2~10B
+                    uint16_t *minor = (uint16_t *)(counter_k);                             // 0~1B
+                    printf("[%2d]=%3ld[Major:%3ld|minor:%3d]    ", i, (*major << minorbit) + *minor, *major, *minor);
+                    if ((i + 1) % 16 == 0)
+                        printf("\n\t");
+                }
+                printf("\n");
             }
         } iit_Node;
         typedef iit_Node *iit_NodePtr;

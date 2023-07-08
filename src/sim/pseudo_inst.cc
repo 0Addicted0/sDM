@@ -623,7 +623,7 @@ namespace gem5
             }
         }
         /**
-         * @attention 待实现*
+         * @brief 通过process中的指针调用sDMspace_register
          */
         bool
         sdm_poster(ThreadContext *tc, Addr vaddr, size_t size)
@@ -632,19 +632,17 @@ namespace gem5
             // tc->getProcessPtr()->sDMmanager->sdm_register(pid,vaddr,size);
             Process *process = tc->getProcessPtr();
             uint64_t pid = process->pid();
-            if (process->sDMmanager->sDMspace_register(pid, vaddr, size))
-            {
-                return true;
-            }
-            return false;
+            return process->sDMmanager && process->sDMmanager->sDMspace_register(pid, vaddr, size);
         }
-
-        void downkeypath(ThreadContext *tc)
+        /**
+         * @brief 通过process中的指针调用sDMspace_free
+         */
+        bool
+        sdm_puller(ThreadContext *tc, Addr vaddr)
         {
             Process *process = tc->getProcessPtr();
-            // uint64_t pid = process->pid();
-            // process->sDMmanager->keypathdown();
+            uint64_t pid = process->pid();
+            return process->sDMmanager && process->sDMmanager->sDMspace_free(pid, vaddr);
         }
-
     } // namespace pseudo_inst
 } // namespace gem5

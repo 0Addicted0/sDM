@@ -3,4 +3,5 @@
 #include "mem/abstract_mem.hh"
 extern std::vector<gem5::memory::AbstractMemory *> sDMdrams;
 extern std::vector<gem5::sDM::sDMmanager *> sDMmanagers;
+extern bool sDMinitOver;
 #endif // __SDMGLB_HH__

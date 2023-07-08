@@ -9,7 +9,7 @@
 
 #define SDM_HMAC_ZOOM 64 // 缩放系数与选择的输入长度和hash算法有关 1/2Page -> 1/2CL(sm3) sizeof(HMAC)=sDataSize/sDMHMACZOOM
 #define CL_SIZE 64       // 64B = 512 bit = CacheLine_Size
-#define PAGE_SIZE 4096
+#define sDM_PAGE_SIZE 4096                     // PAGE_SIZE->sDM_PAGE_SIZE:conflict with gem5
 #define CL_ALIGN_MASK 0xffffffffffffffC0   // 转换为缓存行对齐地址, +by psj:CL mask错误
 #define CL_ALIGNED_CHK 0x03F               // 检查地址是否按CL对齐
 #define PAGE_ALIGN_MASK 0xfffffffffffff000 // 转换为页面对齐地址  , +by psj:PAGE mask错误
@@ -41,15 +41,15 @@
 #define IIT_LEAF_MINOR_MAXM 0x0FFF       // 叶节点的major counter最大值
 #define IIT_MID_MINOR_MAXM 0x3F          // 中间节点点的minor counter最大值
 // #define LITTLE_ENDIAN 1               // 使用小端模式嵌入 conflict with gem5
-#define SM3_KEY_SIZE  32                 // 基于sm3的hmac密钥 SM3_len / BYTE2BIT
+#define SM3_KEY_SIZE 32 // 基于sm3的hmac密钥 SM3_len / BYTE2BIT
 #define HASH_KEY_TYPE 0
 #define CME_KEY_TYPE 1
+#define INVALID_SPACE 0
 namespace gem5
 {
-    extern std::unordered_map<uint64_t, uint64_t> rpTable;
     namespace sDM
     {
-        extern uint64_t maxTick;
+        extern std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> rpTable;
         typedef uint64_t Addr; // 64位地址类型
     }
 }

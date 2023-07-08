@@ -63,7 +63,7 @@ EmulationPageTable::map(Addr vaddr, Addr paddr, int64_t size, uint64_t flags)
             it->second = Entry(paddr, flags);
         } else {
             pTable.emplace(vaddr, Entry(paddr, flags));
-            rpTable.emplace(paddr, vaddr);
+            sDM::rpTable.emplace(paddr, std::make_pair(this->pid(),vaddr));
         }
 
         size -= _pageSize;
@@ -86,7 +86,7 @@ EmulationPageTable::remap(Addr vaddr, int64_t size, Addr new_vaddr)
         auto old_it = pTable.find(vaddr);
         assert(old_it != pTable.end() && new_it == pTable.end());
 
-        rpTable[old_it->second.paddr] = new_vaddr;
+        sDM::rpTable[old_it->second.paddr].second = new_vaddr;
         pTable.emplace(new_vaddr, old_it->second);
         pTable.erase(old_it);
         size -= _pageSize;
@@ -113,9 +113,9 @@ EmulationPageTable::unmap(Addr vaddr, int64_t size)
         auto it = pTable.find(vaddr);
         assert(it != pTable.end());
         Addr paddr = pTable[vaddr].paddr;
-        auto rit = rpTable.find(paddr);
-        assert(rit != rpTable.end());
-        rpTable.erase(rit);
+        auto rit = sDM::rpTable.find(paddr);
+        assert(rit != sDM::rpTable.end());
+        sDM::rpTable.erase(rit);
         pTable.erase(it);
         size -= _pageSize;
         vaddr += _pageSize;

@@ -34,7 +34,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
-// #define SDMDEBUG 1
+// #define SDMDEBUG 1 // 取消校验比较
 #define MAX_HEIGHT 5 // 32G
 /**
  * 约定
@@ -50,10 +50,9 @@ namespace gem5
 {
     namespace sDM
     {
-        
-        // struct sDMmanagerParams;
 
-        typedef uint64_t sdmIDtype;                // sdm空间编号类型 u64
+        // struct sDMmanagerParams;
+        typedef uint64_t sdmID;                    // sdm空间编号类型 u64
         typedef uint64_t sdm_size;                 // sdm保护的数据的大小
         typedef uint8_t *sdm_dataPtr;              // 数据区指针
         typedef uint8_t sdm_hashKey[SM3_KEY_SIZE]; // sdm space hash密钥(hmac iit)
@@ -63,6 +62,28 @@ namespace gem5
         extern uint64_t ceil(uint64_t a, uint64_t b);
         // 可移入sDMmanager的方法中
         extern uint64_t getIITsize(uint64_t data_size);
+        /**
+         * @brief 统计
+         */
+        class sDMstat
+        {
+        private:
+            uint64_t _totWriteCount, _totReadCount;
+            std::map<Addr, uint64_t> sp_distrib; // addr <==> access count
+            std::map<Tick, uint64_t> ti_distrib; // tick <==> access bytes
+            std::string _name;
+
+        public:
+            uint64_t L1hits, L2hits, hits;
+            uint64_t L1access, L2access, L1miss, L2miss;
+            sDMstat(std::string name);
+            ~sDMstat();
+            void addstat(Addr addr, uint32_t byte_size, bool isRead);
+            uint64_t getReadCount();
+            uint64_t getWriteCount();
+            void print_tot();
+            void print_cache();
+        };
         /**
          * @author
          * yqy
@@ -92,8 +113,8 @@ namespace gem5
          */
         // typedef struct _sdm_dataPagePtrPage
         // {
-        //     sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1]; // 0 ~ PAGE_SIZE / PAIR_SIZE - 1 - 1
-        //     sdmIDtype reserved;                              // 保留,本页存储的数据页面指针集所属的sdm编号
+        //     sdm_pagePtrPair pair[sDM_PAGE_SIZE / PAIR_SIZE - 1]; // 0 ~ sDM_PAGE_SIZE / PAIR_SIZE - 1 - 1
+        //     sdmID reserved;                              // 保留,本页存储的数据页面指针集所属的sdm编号
         //     sdm_dataPtr next;                                // 指向下一个存放数据页面指针集合的本地物理页
         // } sdm_dataPagePtrPage;
         // typedef sdm_dataPagePtrPage *sdm_dataPagePtrPagePtr;
@@ -108,9 +129,9 @@ namespace gem5
          */
         // typedef struct _sdm_iitNodePagePtrPage
         // {
-        //     sdmIDtype id;     // 保留,本页存储的HMAC数据页面指针集所属的sdm编号
+        //     sdmID id;     // 保留,本页存储的HMAC数据页面指针集所属的sdm编号
         //     sdm_dataPtr next; // 指向下一个存放数据页面指针集合的本地物理页
-        //     sdm_pagePtrPair pair[PAGE_SIZE / PAIR_SIZE - 1];
+        //     sdm_pagePtrPair pair[sDM_PAGE_SIZE / PAIR_SIZE - 1];
         // } sdm_iitNodePagePtrPage;
         // typedef sdm_iitNodePagePtrPage *sdm_iitNodePagePtrPagePtr;
 
@@ -146,8 +167,8 @@ namespace gem5
             // 默认为两级
             union
             {
-                skip_jmp jmp[(PAGE_SIZE / SKIP_SIZE) - 1];         // 指向下一个存放数据页面指针集合的本地物理页,jmp[i]表示其后第2^(i[0,...])个连续段
-                sdm_pagePtrPair pair[(PAGE_SIZE / PAIR_SIZE) - 1]; // 剩余可用pair数
+                skip_jmp jmp[(sDM_PAGE_SIZE / SKIP_SIZE) - 1];         // 指向下一个存放数据页面指针集合的本地物理页,jmp[i]表示其后第2^(i[0,...])个连续段
+                sdm_pagePtrPair pair[(sDM_PAGE_SIZE / PAIR_SIZE) - 1]; // 剩余可用pair数
             };
             local_jmp cur_segMax; // 当前连续页段的最大,此结构中的next保留未用
         } sdm_PagePtrPage;        // PAGE
@@ -172,20 +193,20 @@ namespace gem5
          * |metadata|
          * |         -------------------\
          * |                             --------------------------------------\
-         * |-数据空间大小-|-数据页指针链表头-|-HMAC指针链表头-|-完整性树指针链表头-|
+         * |-数据空间大小-|-数据页指针链表头-|-HMAC指针链表头-|-完整性树指针表头-|
          */
         typedef struct _sdm_space
         {
-            sdmIDtype id;                            // 每个space拥有唯一id,用于避免free-malloc counter重用问题
+            sdmID id;                                // 每个space拥有唯一id,用于避免free-malloc counter重用问题
+            Addr datavAddr;                          // 数据虚拟地址起始
             sdm_size sDataSize;                      // 数据空间大小字节单位
             uint32_t iITh;                           // 完整性树高
-            Addr datavAddr;                          // 数据虚拟地址起始
             sdm_hmacPagePtrPagePtr HMACPtrPagePtr;   // HMAC页指针集指针
             int hmac_skip;                           // hmac数据对表最大skip大小
             sdm_iitNodePagePtrPagePtr iITPtrPagePtr; // 完整性树页指针集指针
             int iit_skip;                            // iit数据对表最大skip大小
             // 52B(43B)->64B
-            iit_Node Root;                        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
+            iit_Node Root;        // 当前空间树Root(暂时使用一个单独的64arity节点level0代替)
             sdm_hashKey hash_key; // 当前空间完整性树密钥 16B
             sdm_CMEKey cme_key;   // 当前空间内存加密密钥 32B
             /**
@@ -255,24 +276,152 @@ namespace gem5
             void read4gem5(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
 
         public:
+            class sDMLRUCache
+            {
+                typedef struct DLinkedNode
+                {
+                    uint64_t NodeAddr; // 节点地址
+                    // uint8_t* value = (uint8_t*)malloc(sizeof(uint8_t) * 64);  // 64 byte
+                    uint8_t value[64];
+                    DLinkedNode *pre;
+                    DLinkedNode *post;
+                } DLinkedNode;
+
+            private:
+                std::unordered_map<Addr, DLinkedNode *> keypathcache;
+
+            private:
+                int count;
+
+            private:
+                int capacity; // cache size(num of cache line)
+                int CacheID;  // L1Cache or L2Cache
+
+            private:
+                DLinkedNode *head, *tail;
+
+            public:
+                sDMmanager *sDMmanagerptr;
+                sDMLRUCache(int capacity, Tick latency, int ID, sDMmanager *sDMmanagerptr)
+                {
+                    this->count = 0;
+                    this->capacity = capacity;
+                    this->latency = latency;
+                    this->CacheID = ID;
+                    this->sDMmanagerptr = sDMmanagerptr;
+
+                    head = new DLinkedNode();
+                    head->pre = NULL;
+
+                    tail = new DLinkedNode();
+                    tail->post = NULL;
+
+                    head->post = tail;
+                    tail->pre = head;
+                }
+                ~sDMLRUCache()
+                {
+                    while (head != tail)
+                    {
+                        auto it = head->post;
+                        delete (head);
+                        head = it;
+                    }
+                }
+
+            public:
+                Tick latency = 0;
+                DLinkedNode *get(Addr key)
+                {
+                    if (keypathcache.count(key) > 0)
+                    {
+                        return keypathcache[key];
+                    }
+                    else
+                    {
+                        return NULL;
+                    }
+                }
+                bool Write2Cache(Addr newNodeaddr, uint8_t *databuf, uint8_t *retbuf, uint64_t ID);
+
+            public:
+                /**
+                 * @brief
+                 * @param key
+                 * @param value
+                 * @param isread 1是读，0是写
+                 * @return
+                 */
+                bool access(Addr key, uint8_t *value, bool isread);
+
+            private:
+                void addNode(DLinkedNode *node)
+                {
+                    node->pre = head;
+                    node->post = head->post;
+
+                    head->post->pre = node;
+                    head->post = node;
+                }
+
+            private:
+                void removeNode(DLinkedNode *node)
+                {
+                    DLinkedNode *pre = node->pre;
+                    DLinkedNode *post = node->post;
+
+                    pre->post = post;
+                    post->pre = pre;
+                }
+
+            private:
+                void moveToHead(DLinkedNode *node)
+                {
+                    removeNode(node);
+                    addNode(node);
+                }
+
+            private:
+                DLinkedNode *popTail()
+                {
+                    DLinkedNode *res = tail->pre;
+                    return res;
+                }
+            };
+            class sDMCache
+            {
+            public:
+                sDMmanager *sDMmanagerptr;
+
+            public:
+                Tick RemoteMemAccessLatency = 0;
+                sDMCache(sDMmanager *sDMmanagerptr, int L1CacheCapacity = 0, int L2CacheCapacity = 0, Tick L1CacheLatency = 0,
+                         Tick L2CacheLatency = 0, Tick RemoteMemAccessLatency = 0)
+                {
+                    this->L1Cache = new sDMLRUCache(L1CacheCapacity, L1CacheLatency, 1, sDMmanagerptr);
+                    this->L2Cache = new sDMLRUCache(L2CacheCapacity, L2CacheLatency, 2, sDMmanagerptr);
+                    this->RemoteMemAccessLatency = RemoteMemAccessLatency;
+                    this->sDMmanagerptr = sDMmanagerptr;
+                }
+                ~sDMCache();
+                sDMLRUCache *L1Cache;
+                sDMLRUCache *L2Cache;
+                /**
+                 * @brief
+                 * @param Nodeaddr
+                 * @param databuf
+                 * @param isread 读还是写，1是读，0是写
+                 * @return
+                 */
+                Tick CacheAccess(Addr Nodeaddr, uint8_t *databuf, bool isread);
+            };
             class sDMPort : public RequestPort
             {
             public:
-                // sDMPort(const std::string &name, sDMmanager *owner) : RequestPort(name, owner),
-                //                                                       sdmmanager(owner)
-                // {
-                // }
                 sDMPort(const std::string &_name, sDMmanager *_sdmmanager) : RequestPort(_name, _sdmmanager),
                                                                              sdmmanager(_sdmmanager)
                 {
-                    printf("name:%s sDMmanager:%p", _name.c_str(), _sdmmanager);
-                    // if (isConnected())
-                    // {
-                    //     printf(" peer:%s", getPeer().name().c_str());
-                    // }
-                    // else
-                    //     printf(" unconnected");
-                    // printf("\n!!sDMPort init!!\n");
+                    // printf("name:%s sDMmanager:%p\n", _name.c_str(), _sdmmanager);
                 }
 
             protected:
@@ -280,39 +429,16 @@ namespace gem5
 
                 bool recvTimingResp(PacketPtr pkt)
                 {
-                    sdmmanager->pkt_recv = pkt;
-                    sdmmanager->has_recv = true;
-                    // printf("sdm recvTimingresp %lx:\n", pkt->getAddr());
-                    // if (pkt->getAddr() == sdmmanager->waitAddr && pkt->isResponse())
-                    // {
-                    //     sdmmanager->has_recv = true;
-                    //     if (sdmmanager->waitAddr >= 0x20000000000)
-                    //     {
-                    //         uint8_t *p = pkt->getPtr<uint8_t>();
-                    //         printf("sdm recvTimingresp %lx: ", sdmmanager->waitAddr);
-                    //         for (int i = 0; i < pkt->getSize(); i++)
-                    //         {
-                    //             printf("%02x ", *(p + i));
-                    //         }
-                    //         printf("\n");
-                    //     }
-                    //     else
-                    //     {
-                    //         printf("sdm recvTimingresp %lx: %s\n", sdmmanager->waitAddr, pkt->isRead() ? "read" : "write");
-                    //     }
-                    // }
+                    // sdmmanager->pkt_recv = pkt;
+                    // sdmmanager->has_recv = true;
                     return true;
                 }
                 void recvReqRetry()
                 {
-                    printf("sDMmanager retry\n");
+                    // printf("sDMmanager retry\n");
                     panic("%s does not expect a retry\n", name());
                 }
             };
-
-            bool has_recv;      // false
-            PacketPtr pkt_recv; // nullptr
-            Addr waitAddr;      //= 0
             sDMPort memPort;
             /**
              * @author psj
@@ -326,35 +452,47 @@ namespace gem5
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
             RequestorID _requestorId;
-            Process *process;                 // 是为了使用pTable而引入与实际情况是不相符的
-            sdmIDtype sdm_space_cnt;          // 全局单增,2^64永远不会耗尽, start from 1
-            int local_pool_id;                // 记录每个process/workload的本地pool的编号
-            int remote_pool_id;               // 可用本地内存池(内存段)编号
+            Process *process;    // 是为了使用pTable而引入与实际情况是不相符的
+            sdmID sdm_space_cnt; // sDM_space编号器全局单增,2^64永远不会耗尽, start from 1
+            int local_pool_id;   // 记录每个process/workload的本地pool的编号
+            int remote_pool_id;  // 可用本地内存池(内存段)编号
+            // hash/encryption时延
+            uint64_t hash_latency;
+            uint64_t encrypt_latency;
+            uint64_t onchip_cache_size;
+            uint64_t onchip_cache_latency;
+            uint64_t dram_cache_size;
             MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
-            // 拦截每次的访存的vaddr时，查找此表对应到相应的space id vaddr <==> (page_num,space id)
-            std::map<Addr, std::pair<size_t, sdmIDtype>> sdm_paddr2id;
-            bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请本地内存物理空间
+            // 拦截每次的访存的vaddr时,根据pid找到对应的sdm space表,查找此表对应到相应的space id vaddr <==> (page_num,space id)
+            std::unordered_map<uint64_t, std::map<Addr, std::pair<size_t, sdmID>>> sdm_paddr2id;
+            sDMCache *KeypathCache; // L1 and L2
+            sDMstat *lstat;         // 本地内存统计量
+            sDMstat *rstat;         // 远端内存统计量
+
+            sDMmanager(const sDMmanagerParams &p);
+            ~sDMmanager();
+
+            bool sdm_malloc(int npages, int pool_id, std::vector<phy_space_block> &phy_list); // 申请gem5模拟内存物理空间
+            bool sdm_free(int pool_id, std::vector<phy_space_block> &phy_list);
+
             void build_SkipList(std::vector<phy_space_block> &remote_phy_list, std::vector<phy_space_block> &local_phy_list,
                                 int skip, int ac_num, int lnpages);
             void write2Mem(uint32_t byte_size, uint8_t *data, Addr gem5_addr);
             void read4Mem(uint32_t byte_size, uint8_t *container, Addr gem5_addr);
-            bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmIDtype id,
-                             uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
+            bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmID id, uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
-            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list, 
-                std::vector<phy_space_block> r_iit_phy_list,uint32_t h, sdm_space& sp);
-
-            sDMmanager(const sDMmanagerParams &p);
-            sdmIDtype isContained(Addr vaddr);
+            void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list,
+                               std::vector<phy_space_block> r_iit_phy_list, uint32_t h, sdm_space &sp);
+            sdmID isContained(uint64_t pid, Addr vaddr);
             bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
-            Addr getVirtualOffset(sdmIDtype id, Addr paddr);
-            int getKeyPath(sdmIDtype id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
-            bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmIDtype id, Addr *rva, int *h,
+            bool sDMspace_free(uint64_t pid, Addr vaddr);
+            Addr getVirtualOffset(sdmID id, Addr paddr);
+            int getKeyPath(sdmID id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
+            bool verify(Addr data_vaddr, uint8_t *hpg_data, sdmID id, Addr *rva, int *h,
                         Addr *keyPathAddr, iit_NodePtr keyPathNode, Addr *hmacAddr, sdm_hashKey hash_key);
-            void write(PacketPtr pkt, uint8_t *aligned_mem_ptr, Addr pktVAddr);
-            void read(PacketPtr pkt, uint8_t *algined_mem_ptr, Addr vaddr);
-
+            void write(uint64_t pid, PacketPtr pkt, uint8_t *aligned_mem_ptr, Addr pktVAddr);
+            void read(uint64_t pid, PacketPtr pkt, uint8_t *algined_mem_ptr, Addr vaddr);
             Port &
             getPort(const std::string &if_name, PortID idx = InvalidPortID) override
             {
@@ -362,8 +500,7 @@ namespace gem5
                     return memPort;
                 return sDMmanager::getPort(if_name, idx);
             }
-
-            void keypathdown();
+            void AccessMemory(Addr addr, uint8_t *databuf, bool isread, uint8_t datasize);
         };
     }
 }

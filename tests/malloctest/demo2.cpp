@@ -3,7 +3,6 @@
 #include "gem5/sdmmalloc.h"
 const char pat[] = "Without sDMM is not a good idea!";
 int main(){
-    // welc();
     char *p = (char *)malloc(sizeof(char) * 1024);
     memset(p, 0, 64);
     // scanf("%s", p);

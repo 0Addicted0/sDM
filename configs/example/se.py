@@ -124,14 +124,23 @@ def get_processes(args):
         if len(errouts) > idx:
             process.errout = errouts[idx]
 
-        # by psj
-        # sDMmanager = sDM.sDMmanager()
-        process.sDMmanager = sDMmanager()
-        # sDMmanager.process = process
-        process.sDMmanager.remote_pool_id = pool_ids_v[0]
-        process.sDMmanager.local_pool_id = pool_ids_v[1]
+        if args.sDMenable != False:
+            # by psj
+            process.sDMmanager = sDMmanager()
+            process.sDMmanager.remote_pool_id = pool_ids_v[0]
+            process.sDMmanager.local_pool_id = pool_ids_v[1]
+            # give latency
+            process.sDMmanager.hash_latency = int(args.hash_lat)
+            process.sDMmanager.encrypt_latency = int(args.enc_lat)
+            # give cache size
+            process.sDMmanager.onchip_cache_size = int(args.onchip_cache_size)
+            process.sDMmanager.onchip_cache_latency = int(args.onchip_cache_lat)
+            process.sDMmanager.dram_cache_size = int(args.dram_cache_size)
+            # give fast_mode
+            process.sDMmanager.fast_mode = int(args.fast_mode)
+        else:
+            process.sDMmanager = NULL
 
-        #system.sDMmanagers.append(sDMmanager)
         multiprocesses.append(process)
         idx += 1
 
@@ -152,7 +161,6 @@ if "--ruby" in sys.argv:
 args = parser.parse_args()
 
 multiprocesses = []
-#system.sDMmanagers = []
 numThreads = 1
 
 if args.bench:
@@ -302,8 +310,6 @@ if args.ruby:
 else:
     MemClass = Simulation.setMemClass(args)
     system.membus = SystemXBar()
-    # system.SimpleMemobj = SimpleMemobj()
-    # system.sDMmanager = sDMmanager()
 
     system.system_port = system.membus.cpu_side_ports
     CacheConfig.config_cache(args, system)
@@ -315,9 +321,6 @@ else:
     # system.sDMmanager.mem_side = system.membus.cpu_side_ports
     config_filesystem(system, args)
 
-    #for sDMmanager in system.sDMmanagers:
-    #    sDMmanager.memPort = system.membus.cpu_side_ports
-    
 system.workload = SEWorkload.init_compatible(mp0_path)
 
 if args.wait_gdb:

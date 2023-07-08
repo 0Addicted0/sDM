@@ -18,6 +18,7 @@ namespace gem5
 {
     namespace CME
     {
+        int FAST_MODE = 0;
         void dump(char *title, uint8_t *txt, int len)
         {
             printf("%s\n\t", title);
@@ -90,14 +91,15 @@ namespace gem5
          */
         void sDM_Encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
         {
-            // return;
+            if(FAST_MODE)
+                return;
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_cipher[SM4_INPUT_SIZE];
             ConstructOTP(paddr2CL, counter, counterLen, OTP);
 #ifdef CME_debug
             printf("addr=%lx ", paddr2CL);
-            // dump("counter", counter, counterLen);
-            // dump("key", key2EncryptionCL, SM4_KEY_SIZE);
+            dump("counter", counter, counterLen);
+            dump("key", key2EncryptionCL, SM4_KEY_SIZE);
             dump("OTP", OTP, CL_SIZE);
             dump("plaint", plaint, CL_SIZE);
 #endif
@@ -125,14 +127,15 @@ namespace gem5
          */
         void sDM_Decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
         {
-            // return;
+            if(FAST_MODE)
+                return;
             // 加密分块数
             uint8_t OTP[CL_SIZE], otp_plaint[SM4_INPUT_SIZE];
             ConstructOTP(paddr2CL, counter, counterLen, OTP);
 #ifdef CME_debug
             printf("addr=%lx ", paddr2CL);
-            // dump("counter", counter, counterLen);
-            // dump("key", key2EncryptionCL, SM4_KEY_SIZE);
+            dump("counter", counter, counterLen);
+            dump("key", key2EncryptionCL, SM4_KEY_SIZE);
             dump("OTP", OTP, CL_SIZE);
             dump("cipher", cipher, CL_SIZE);
 #endif
@@ -150,17 +153,19 @@ namespace gem5
 #endif
         }
 
-        void CMEdump(char *title, uint8_t *tptr, size_t sz = PAGE_SIZE)
+        void CMEdump(char *title, uint8_t *tptr, size_t sz = sDM_PAGE_SIZE)
         {
-            printf("%s:\n", title);
+            printf("%s:\n\t", title);
             uint64_t *ptr = (uint64_t *)tptr;
-            for (size_t i = 0; i < sz / 8; i++)
+            for (int i = 0; i < sz; i++)
             {
-                printf("%016lx  ", ptr[i]);
-                if ((i + 1) % 4 == 0)
-                    printf("\n");
+                printf("%02x ", tptr[i]);
+                if ((i + 1) % 8 == 0)
+                    printf("\t");
+                if ((i + 1) % 16 == 0)
+                    printf("\n\t");
             }
-            printf("----------------------------------------\n");
+            printf("\n----------------------------------------\n");
         }
         /**
          * @author
@@ -180,8 +185,10 @@ namespace gem5
          */
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
-            // return;
             memset(hmac, 0, hmacLen);
+#ifdef FAST_MODE 
+            return;
+#endif
             assert(hmacLen <= SM3_SIZE && "invalid output length");
 #ifdef HMAC_debug
             if (inputLen == 64)
