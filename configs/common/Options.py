@@ -795,11 +795,16 @@ def addSEOptions(parser):
         default=0,
         help="To speed up secure simulation.",
     )
-    # parser.add_argument(
-    #     "--dramCache_lat",
-    #     default=0,
-    #     help="Specify the sDMmanager dram cache access latency(Cycles).",
-    # )
+    parser.add_argument(
+        "--lmem_lat",
+        default=0,
+        help="Specify the local dram access latency(Cycles).",
+    )
+    parser.add_argument(
+        "--rmem_lat",
+        default=0,
+        help="Specify the remote dram access latency(Cycles).",
+    )
 
 
 def addFSOptions(parser):

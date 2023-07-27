@@ -204,6 +204,9 @@ def config_mem(options, system):
     # array of memory interfaces and set their parameters to match
     # their address mapping in the case of a DRAM
     range_iter = 0
+    rmem_lat = int(getattr(options, "rmem_lat", 0))
+    lmem_lat = int(getattr(options, "lmem_lat", 0))
+    cpu_freq = int(getattr(options, "cpu-clock", "2GHz").split('G')[0])
     for r in system.mem_ranges:
         # As the loops iterates across ranges, assign them alternatively
         # to DRAM and NVM if both configured, starting with DRAM
@@ -242,8 +245,10 @@ def config_mem(options, system):
                     # the first iteration is remote memory
                     # here we set the latency of the memory controller
                     # print("try to add remote mem lat")
-                    mem_ctrl.static_frontend_latency = "200ns"
-                    mem_ctrl.static_backend_latency = "200ns"
+                    mem_ctrl.static_frontend_latency = str(rmem_lat // cpu_freq) + 'ns' 
+                else:
+                    mem_ctrl.static_frontend_latency = str(lmem_lat // cpu_freq) + 'ns'
+
 
                 mem_ctrls.append(mem_ctrl)
 

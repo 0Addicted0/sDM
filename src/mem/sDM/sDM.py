@@ -40,15 +40,17 @@ class sDMmanager(ClockedObject):
     # process = Param.Process("owner process")
     local_pool_id = Param.Int(0, "the pool id of local memory")
     remote_pool_id = Param.Int(0, "the pool id of remote memory")
+    fast_mode = Param.Int(0, "To speed up secure simulation")
+    
     hash_latency = Param.Int(0, "Hash latency(Cycles)")
     encrypt_latency = Param.Int(0, "Enc/Decrypt latency(Cycles)")
 
-    hash_latency = Param.Int(0, "hash latency(Cycles)")
-    encrypt_latency = Param.Int(0, "nnc/decrypt latency(Cycles)")
-    onchip_cache_latency = Param.Int(0, "onchip cache latency(Cycles)")
     onchip_cache_size = Param.Int(0, "onchip cache line numbers")
     dram_cache_size = Param.Int(0, "dram cache line numbers")
-    fast_mode = Param.Int(0, "To speed up secure simulation")
+
+    onchip_cache_latency = Param.Int(0, "onchip cache latency(Cycles)")
+    local_mem_latency = Param.Int(0, "local memory access latency(Cycles)")
+    remote_mem_latency = Param.Int(0, "remote memory access latency(Cycles)")
 
     mem_side = RequestPort("memory side port, send requests")
     system = Param.System(Parent.any, "System we belong to")

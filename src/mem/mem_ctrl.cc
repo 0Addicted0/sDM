@@ -51,6 +51,7 @@
 #include "mem/nvm_interface.hh"
 #include "sim/system.hh"
 
+int cnt = 0;
 namespace gem5
 {
 
@@ -85,11 +86,18 @@ MemCtrl::MemCtrl(const MemCtrlParams &p) :
     writeQueue.resize(p.qos_priorities);
 
     dram->setCtrl(this, commandWindow);
+    if(cnt == 0)
+    {
+        printf("+-------------------------------------+\n");
+        printf("|         Memory configuration        |\n");
+        printf("+-------------------------------------+\n");
+    }
+    printf("|Range(%1d)%29s|\n",cnt,dram->getAddrRange().to_string().c_str());
+    printf("|    static_frontendLatency:%10ld|\n", frontendLatency);
+    printf("|    static_backendLatency:%11ld|\n", backendLatency);
+    printf("+-------------------------------------+\n");
 
-    // printf("MemCtrl: %s static_frontend_latency:%ld\n\tstatic_backend_latency:%ld\n", 
-    //         this->dram->getAddrRange().to_string().c_str(),
-    //         frontendLatency,backendLatency);
-
+    cnt++;
     // perform a basic check of the write thresholds
     if (p.write_low_thresh_perc >= p.write_high_thresh_perc)
         fatal("Write buffer low threshold %d must be smaller than the "

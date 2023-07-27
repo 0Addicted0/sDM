@@ -109,7 +109,7 @@ namespace gem5
             // 打印总体统计
             printf("\tReadCount:%ld\n\tWriteCount:%ld\n", _totReadCount, _totWriteCount);
         }
-        void 
+        void
         sDMstat::print_distrib()
         {
             // 打印分布情况
@@ -120,7 +120,7 @@ namespace gem5
             // for (auto it : ti_distrib)
             //     printf("\t\t  %ld:%ld\n", it.first, it.second);
         }
-        void 
+        void
         sDMstat::print_enc_dec()
         {
             // 加解密计数器
@@ -135,7 +135,7 @@ namespace gem5
                    L1hits, L2hits,
                    L1miss, L2miss);
         }
-        void 
+        void
         sDMstat::start()
         {
             _dw = _totWriteCount;
@@ -146,7 +146,7 @@ namespace gem5
             _ddec = _decrypt_counter;
             _dhash = CME::HMAC_COUNTER;
         }
-        void 
+        void
         sDMstat::end(uint64_t &dw, uint64_t &dr, uint64_t &dL1, uint64_t &dL2, uint64_t &denc, uint64_t &ddec)
         {
             dw = _totWriteCount - _dw;
@@ -172,8 +172,10 @@ namespace gem5
                                                                  hash_latency(params.hash_latency),
                                                                  encrypt_latency(params.encrypt_latency),
                                                                  onchip_cache_size(params.onchip_cache_size),
+                                                                 dram_cache_size(params.dram_cache_size),
                                                                  onchip_cache_latency(params.onchip_cache_latency),
-                                                                 dram_cache_size(params.dram_cache_size)
+                                                                 localMemAccessLatency(params.local_mem_latency),
+                                                                 remoteMemAccessLatency(params.remote_mem_latency)
         {
             // has_recv = false;
             // pkt_recv = NULL;
@@ -202,18 +204,18 @@ namespace gem5
             hash_latency = cyclesToTicks(Cycles(hash_latency));
             encrypt_latency = cyclesToTicks(Cycles(encrypt_latency));
             onchip_cache_latency = cyclesToTicks(Cycles(onchip_cache_latency));
-            localMemAccessLatency = 200000; // Ticks
-            remoteMemAccessLatency = 4000000; // Ticks
+            localMemAccessLatency = cyclesToTicks(Cycles(localMemAccessLatency));   // Ticks
+            remoteMemAccessLatency = cyclesToTicks(Cycles(remoteMemAccessLatency)); // Ticks
             printf("+-----------------------------------+\n");
             printf("|     sDMmanager configuration      |\n");
             printf("+-----------------------------------+\n");
-            printf("|dram_cache_size      (Byte)=%7ld|\n", dram_cache_size);
-            printf("|onchip_cache_size    (Byte)=%7ld|\n", onchip_cache_size);
-            printf("|hash_latency        (Ticks)=%7ld|\n", hash_latency);
-            printf("|encrypt_latency     (Ticks)=%7ld|\n", encrypt_latency);
-            printf("|onchip_cache_latency(Ticks)=%7ld|\n", onchip_cache_latency);
-            printf("|local_Mem_latency   (Ticks)=%7ld|\n", localMemAccessLatency);
-            printf("|remote_Mem_latency  (Ticks)=%7ld|\n", remoteMemAccessLatency);
+            printf("|dram_cache_size     (Bytes)=%7ld|\n", dram_cache_size * CL_SIZE);
+            printf("|onchip_cache_size   (Bytes)=%7ld|\n", onchip_cache_size * CL_SIZE);
+            printf("|hash_latency        (Cycle)=%7ld|\n", params.hash_latency);
+            printf("|encrypt_latency     (Cycle)=%7ld|\n", params.encrypt_latency);
+            printf("|onchip_cache_latency(Cycle)=%7ld|\n", params.onchip_cache_latency);
+            printf("|local_Mem_latency   (Cycle)=%7ld|\n", params.local_mem_latency);
+            printf("|remote_Mem_latency  (Cycle)=%7ld|\n", params.remote_mem_latency);
             printf("+-----------------------------------+\n");
             sdm_space_cnt = 0;
             sdm_table.assign(1, sdm_space());
@@ -291,8 +293,6 @@ namespace gem5
          * @param byte_size 写入字节大小
          * @param data 数据指针
          * @param gem5_addr 写入的位置
-         * @attention 未验证*
-         * @attention 注意可能需要将地址按CL对齐后再读写
          */
         void sDMmanager::write2gem5(uint32_t byte_size, uint8_t *data, Addr gem5_addr)
         {
@@ -460,7 +460,7 @@ namespace gem5
                 // i                                j
                 l = skip - 1;
                 // r = sDM_PAGE_SIZE / PAIR_SIZE; // this will raise too many useless read
-                read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp));// Read fill_num
+                read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp)); // Read fill_num
                 uint32_t fill_num = rboundp->cnum;
                 r = l + 1 + rboundp->cnum - 1 + 1; // rewind to the last data pair
                 int mid = l;
@@ -475,8 +475,8 @@ namespace gem5
                         l = mid;
                 }
                 // 在第r个数据对中找到所在页
-                if(mid != r)// 避免重读
-                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (r * PAIR_SIZE)); 
+                if (mid != r) // 避免重读
+                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (r * PAIR_SIZE));
                 head = rboundp->curPageAddr;
                 head += offset - rboundp->pnum * sDM_PAGE_SIZE;
                 pnum = rboundp->pnum + (offset - rboundp->pnum * sDM_PAGE_SIZE) / sDM_PAGE_SIZE;
@@ -512,12 +512,18 @@ namespace gem5
             uint64_t nodenums = sdm_table[id].sDataSize / (IIT_LEAF_ARITY * CL_SIZE); // 叶节点数,之后表示当前层的节点数
             uint64_t offset = (rva / (CL_SIZE * IIT_LEAF_ARITY));                     // 该偏移对应哪一个叶节点，之后表示相对当前层的节点偏移量
             Addr offsetiit = offset * sizeof(iit_Node);                               // 相对于iit树第一个节点的偏移地址
+            Addr lastOff = 0;                                                         // 上次查询偏移
             for (int i = 0; i < h; i++)
             {
                 // 远端物理地址
-                Addr NodePAddr = find((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip, 0, pnum);
+                Addr NodePAddr;
+                if (i && (((keyPathAddr[i - 1] + offsetiit - lastOff) & PAGE_ALIGN_MASK) == (keyPathAddr[i - 1] & PAGE_ALIGN_MASK)))
+                    NodePAddr = keyPathAddr[i - 1] + offsetiit - lastOff;
+                else
+                    NodePAddr = find((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip, 0, pnum);
                 keyPathAddr[i] = NodePAddr; // 目标节点的远端物理地址
-                // read4Mem(sizeof(iit_Node), (u_int8_t *)(&keyPathNode[i]), NodePAddr);
+                lastOff = offsetiit;        // 上个node的偏移量
+                // read4Mem(sizeof(iit_Node), (u_int8_t *)(&keyPathNode[i]), NodePAddr); // 从缓存中取得
                 if (i < h - 1)
                     KeypathCache->CacheAccess(NodePAddr, (uint8_t *)(keyPathNode) + sizeof(iit_Node) * i, 1);
                 offsetiit += (nodenums - offset) * sizeof(iit_Node);
@@ -525,7 +531,7 @@ namespace gem5
                 offset /= IIT_MID_ARITY;
                 offsetiit += offset * sizeof(iit_Node);
             }
-            memcpy((uint8_t *)(keyPathNode) + sizeof(iit_Node) * (h-1), &sdm_table[id].Root,sizeof(iit_Node));
+            memcpy((uint8_t *)(keyPathNode) + sizeof(iit_Node) * (h - 1), &sdm_table[id].Root, sizeof(iit_Node)); // Get on-chip Root
             return h;
         }
         /**
@@ -678,8 +684,8 @@ namespace gem5
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
                 // CME::sDM_Encrypt(buf, cl, sizeof(cl), paddr, ckey); // 加密数据
-                encrypt(buf, cl, sizeof(cl), paddr, ckey);// 纳入统计量中
-                write2Mem(CL_SIZE, buf, paddr);                     // 写回内存
+                encrypt(buf, cl, sizeof(cl), paddr, ckey); // 纳入统计量中
+                write2Mem(CL_SIZE, buf, paddr);            // 写回内存
                 memcpy(encrypteddata + i * CL_SIZE, buf, CL_SIZE);
                 addr += CL_SIZE;
             }
@@ -749,7 +755,7 @@ namespace gem5
                     }
                     node.init(nodetype, hkey, hpageAddr + i * CL_SIZE);
                     // 写入物理地址
-                    if(curh != h) // 片上根可以不写入内存
+                    if (curh != h) // 片上根可以不写入内存
                         write2Mem(sizeof(iit_Node), (uint8_t *)&node, curpPageAddrstart);
                     curpPageAddrstart += sizeof(_iit_Node);
                     if (curpPageAddrstart >= curpPageAddrend)
@@ -764,7 +770,7 @@ namespace gem5
                 leaf_num = ceil(leaf_num, IIT_MID_ARITY); // 下一层的结点数
                 curh++;
             }
-            memcpy((uint8_t *)(&sp.Root), (uint8_t *)(&node), sizeof(iit_Node));// 单独存储片上根
+            memcpy((uint8_t *)(&sp.Root), (uint8_t *)(&node), sizeof(iit_Node)); // 单独存储片上根
             // printf("[%ld]sDM space initialization completed\n", curTick());
             return;
         }
@@ -786,8 +792,16 @@ namespace gem5
             printf("\tpaddr=0x%lx\n", entry->paddr);
             printf("\tsize=%ldkB\n", sdm_table[id].sDataSize / 1024);
             printf("\tspace_id=%ld\n", id);
-            sdm_table.erase(sdm_table.begin() + id);
-            if(sdm_table.size() == 1)
+            auto sp = sdm_table.begin();
+            for (; sp != sdm_table.end(); sp++)
+            {
+                if (sp->id == id)
+                {
+                    sdm_table.erase(sp);
+                    break;
+                }
+            }
+            if (sdm_table.size() == 1)
                 summary();
             return true;
         }
@@ -888,11 +902,13 @@ namespace gem5
 \tspace_id=%ld\n\
 \tiit_size =%ldB\n\
 \tHMAC_size=%ldB\n\
-\th=%dlayers(Loot included)\n\
-\tHMAC pageAddrSet paddr=0x%lx\n\
-\tiMT  pageAddrSet paddr=0x%lx\n",
-                   curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
-                   r_hmac_phy_list[0].start, l_hmac_phy_list[0].start);
+\th=%dlayers(Loot included)\n",
+                   curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id,
+                   iit_size, hmac_size, sp.iITh);
+// \tHMAC pageAddrSet paddr=0x%lx\n\
+// \tiMT  pageAddrSet paddr=0x%lx\n",
+            //                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
+            //                    r_hmac_phy_list[0].start, r_iit_phy_list[0].start);
             return true;
         }
         /**
@@ -1024,7 +1040,7 @@ namespace gem5
         void sDMmanager::read(uint64_t pid, PacketPtr pkt, uint8_t *algined_mem_ptr, Addr pkt_vaddr)
         {
             // if (pkt->requestorId() == requestorId()) // 不应该检查sDMmanager的请求,但目前无法pass其他process中sDMmanager的请求
-                // return;
+            // return;
             Addr pktAddr = pkt_vaddr;
             sdmID id = sDMmanager::isContained(pid, pktAddr);
             if (id == 0) // 该物理地址不包含在任何sdm中,无需对数据包做修改
@@ -1059,7 +1075,7 @@ namespace gem5
             assert(entry && "paddr is valid");
             paddr = entry->paddr + (pktAddr & (~PAGE_ALIGN_MASK) & (CL_ALIGN_MASK));
             // CME::sDM_Decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key);
-            decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key);// 纳入统计量
+            decrypt(algined_mem_ptr, (uint8_t *)&cl, sizeof(CL_Counter), paddr, cme_key); // 纳入统计量
             // char cmd[256] = {0};
             // sprintf(cmd, "[%ld]sdm  read(%lx)", curTick(), pkt->getAddr());
             // CME::CMEdump(cmd, algined_mem_ptr, CL_SIZE);
@@ -1173,8 +1189,11 @@ namespace gem5
             for (int i = 1; i < h; i++)
             {
                 keyPathNode[i].inc_counter(IIT_MID_TYPE, cur_k, OF);
-                new_hash_tag = keyPathNode[i].get_hash_tag(IIT_MID_TYPE, hash_key, keyPathAddr[i]);
-                keyPathNode[i].embed_hash_tag(IIT_MID_TYPE, new_hash_tag);
+                if(i < h-1) // Root do not need any hash tag
+                {
+                    new_hash_tag = keyPathNode[i].get_hash_tag(IIT_MID_TYPE, hash_key, keyPathAddr[i]);
+                    keyPathNode[i].embed_hash_tag(IIT_MID_TYPE, new_hash_tag);
+                }
                 before_mod_cur_k /= IIT_MID_ARITY;
                 cur_k = before_mod_cur_k & (IIT_MID_ARITY - 1);
             }
@@ -1402,19 +1421,19 @@ namespace gem5
         /**
          * @brief 根据统计量计算时延
          * @attention 计算公式: L1hits * onchip_cache_latency()
-         * 
-        */
-       uint64_t
-       sDMmanager::formula(uint64_t local_dL1, uint64_t local_dL2, uint64_t local_acc, uint64_t remote_acc, uint64_t enc_dec, uint64_t dhash)
-       {
+         *
+         */
+        uint64_t
+        sDMmanager::formula(uint64_t local_dL1, uint64_t local_dL2, uint64_t local_acc, uint64_t remote_acc, uint64_t enc_dec, uint64_t dhash)
+        {
             uint64_t latency = KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
                                localMemAccessLatency * (local_acc) +
                                remoteMemAccessLatency * (remote_acc) +
                                encrypt_latency * (enc_dec) + hash_latency * (dhash);
             return latency;
-       }
-       uint64_t sDMmanager::delay()
-       {
+        }
+        uint64_t sDMmanager::delay()
+        {
             uint64_t local_dw, local_dr, local_dL1, local_dL2, local_denc, local_ddec;
             uint64_t remote_dw, remote_dr, remote_dL1, remote_dL2, remote_denc, remote_ddec;
             uint64_t dhash = CME::HMAC_COUNTER - lstat->_dhash;
@@ -1423,33 +1442,33 @@ namespace gem5
             rstat->end(remote_dw, remote_dr, remote_dL1, remote_dL2, remote_denc, remote_ddec);
             // 计算延迟
             uint64_t latency = formula(local_dL1, local_dL2, (local_dw + local_dr), (remote_dw + remote_dr), (local_denc + local_ddec), dhash);
-                            // KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
-                            //                    localMemAccessLatency * (local_dw + local_dr) +
-                            //                    remoteMemAccessLatency * (remote_dw + remote_dr) +
-                            //                    encrypt_latency * (local_denc + local_ddec) + hash_latency * dhash;
-            // printf("extra latency:%ld {rAcc:%ld lAcc:%ld enc_dec:%ld hash:%ld L1:%ld L2:%ld}\n", 
+            // KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
+            //                    localMemAccessLatency * (local_dw + local_dr) +
+            //                    remoteMemAccessLatency * (remote_dw + remote_dr) +
+            //                    encrypt_latency * (local_denc + local_ddec) + hash_latency * dhash;
+            // printf("extra latency:%ld {rAcc:%ld lAcc:%ld enc_dec:%ld hash:%ld L1:%ld L2:%ld}\n",
             //         latency,
             //         remote_dw + remote_dr,
             //         local_dw + local_dr,
-            //         local_denc + local_ddec, 
-            //         dhash, 
-            //         local_dL1, 
+            //         local_denc + local_ddec,
+            //         dhash,
+            //         local_dL1,
             //         local_dL2);
             return latency;
-       }
-       void sDMmanager::decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
-       {
+        }
+        void sDMmanager::decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
+        {
             lstat->_decrypt_counter++;
             CME::sDM_Decrypt(cipher, counter, counterLen, paddr2CL, key2EncryptionCL);
-       }
-       void sDMmanager::encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
-       {
+        }
+        void sDMmanager::encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
+        {
             lstat->_encrypt_counter++;
             CME::sDM_Encrypt(plaint, counter, counterLen, paddr2CL, key2EncryptionCL);
-       }
-       void sDMmanager::summary()
-       {
-            
+        }
+        void sDMmanager::summary()
+        {
+
             uint64_t tot = 0;
             // tot = formula(lstat->L1hits,
             //               lstat->L2hits,
@@ -1462,31 +1481,31 @@ namespace gem5
             uint64_t local = (lstat->getReadCount() + lstat->getWriteCount()) * localMemAccessLatency / 1000;
             uint64_t remote = (rstat->getReadCount() + rstat->getWriteCount()) * localMemAccessLatency / 1000;
             uint64_t enc_dec = (lstat->_encrypt_counter + lstat->_decrypt_counter) * encrypt_latency / 1000;
-            uint64_t hash = (CME::HMAC_COUNTER) * hash_latency / 1000;
+            uint64_t hash = (CME::HMAC_COUNTER)*hash_latency / 1000;
             tot = L1 + L2 + local + remote + enc_dec + hash;
 
             printf("\n+------------------------------------+\n");
             printf("|              Summary               |\n");
             printf("+------------------------------------+\n");
             printf("|Total Latency:%13ld (Cycles)|\n", tot);
-            printf("|Total L1Latency:%11ld (Cylces)|  P:%.2lf%\n", L1, (double)L1/(double)tot*100.0);
-            printf("|Total L2Latency:%11ld (Cylces)|  P:%.2lf%\n", L2, (double)L2/(double)tot*100.0);
-            printf("|Total lAccLat:%13ld (Cylces)|  P:%.2lf%\n", local, (double)local/(double)tot*100.0);
-            printf("|Total rAccLat:%13ld (Cylces)|  P:%.2lf%\n", remote, (double)remote/(double)tot*100.0);
-            printf("|Total enc_decLat:%10ld (Cylces)|  P:%.2lf%\n", enc_dec, (double)enc_dec/(double)tot * 100.0);
-            printf("|Total hashLat:%13ld (Cylces)|  P:%.2lf%\n", hash, (double)hash/(double)tot*100.0);
+            printf("|Total L1Latency:%11ld (Cylces)|  P:%.4lf%\n", L1, (double)L1 / (double)tot * 100.0);
+            printf("|Total L2Latency:%11ld (Cylces)|  P:%.4lf%\n", L2, (double)L2 / (double)tot * 100.0);
+            printf("|Total lMemAccLat:%10ld (Cylces)|  P:%.4lf%\n", local, (double)local / (double)tot * 100.0);
+            printf("|Total rMemAccLat:%10ld (Cylces)|  P:%.4lf%\n", remote, (double)remote / (double)tot * 100.0);
+            printf("|Total enc_decLat:%10ld (Cylces)|  P:%.4lf%\n", enc_dec, (double)enc_dec / (double)tot * 100.0);
+            printf("|Total hashLat:%13ld (Cylces)|  P:%.4lf%\n", hash, (double)hash / (double)tot * 100.0);
             printf("+------------------------------------+\n\n");
             printf("+------------------------------------+\n");
             printf("|              Details               |\n");
             printf("+------------------------------------+\n");
-            printf("|remote memory:\n");
+            printf("# remote memory:\n");
             rstat->print_tot();
-            printf("|local memory:\n");
+            printf("# local memory:\n");
             lstat->print_tot();
-            printf("|cache:\n");
+            printf("# cache:\n");
             lstat->print_cache();
-            printf("|encrypt and decrypt:\n");
+            printf("# encrypt and decrypt:\n");
             lstat->print_enc_dec();
-       }
+        }
     }
 }

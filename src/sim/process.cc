@@ -172,10 +172,10 @@ namespace gem5
 
         //  yqy mark
         printf("process[%s] construct\n", progName());
-        printf("available pool id: ");
-        for (int pool_id : pool_ids)
-            printf("%d ", pool_id);
-        printf("\n");
+        // printf("available pool id: ");
+        // for (int pool_id : pool_ids)
+        //     printf("%d ", pool_id);
+        // printf("\n");
 
         // 实例化sDMmanager
         // sDMmanagerParams p;

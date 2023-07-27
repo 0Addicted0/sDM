@@ -136,6 +136,8 @@ def get_processes(args):
             process.sDMmanager.onchip_cache_size = int(args.onchip_cache_size)
             process.sDMmanager.onchip_cache_latency = int(args.onchip_cache_lat)
             process.sDMmanager.dram_cache_size = int(args.dram_cache_size)
+            process.sDMmanager.local_mem_latency = int(args.lmem_lat)
+            process.sDMmanager.remote_mem_latency = int(args.rmem_lat)
             # give fast_mode
             process.sDMmanager.fast_mode = int(args.fast_mode)
         else:
@@ -213,7 +215,7 @@ system = System(
     mem_ranges=[
         AddrRange(args.mem_size),
         AddrRange(0x10000000000, size=args.mem_size),  # Add a new test memory
-        AddrRange(0x20000000000, size=args.mem_size),  # Add a new test memory
+        # AddrRange(0x20000000000, size=args.mem_size),  # Add a new test memory
     ],
     cache_line_size=args.cacheline_size,
 )
