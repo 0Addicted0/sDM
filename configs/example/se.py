@@ -124,7 +124,7 @@ def get_processes(args):
         if len(errouts) > idx:
             process.errout = errouts[idx]
 
-        if args.sDMenable != False:
+        if args.sDMenable == 'true':
             # by psj
             process.sDMmanager = sDMmanager()
             process.sDMmanager.remote_pool_id = pool_ids_v[0]

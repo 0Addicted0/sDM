@@ -19,6 +19,7 @@ namespace gem5
     namespace CME
     {
         int FAST_MODE = 0;
+        uint64_t HMAC_COUNTER;
         void dump(char *title, uint8_t *txt, int len)
         {
             printf("%s\n\t", title);
@@ -156,7 +157,7 @@ namespace gem5
         void CMEdump(char *title, uint8_t *tptr, size_t sz = sDM_PAGE_SIZE)
         {
             printf("%s:\n\t", title);
-            uint64_t *ptr = (uint64_t *)tptr;
+            // uint64_t *ptr = (uint64_t *)tptr;
             for (int i = 0; i < sz; i++)
             {
                 printf("%02x ", tptr[i]);
@@ -185,10 +186,10 @@ namespace gem5
          */
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
+            HMAC_COUNTER++;
             memset(hmac, 0, hmacLen);
-#ifdef FAST_MODE 
-            return;
-#endif
+            if(FAST_MODE)
+                return;
             assert(hmacLen <= SM3_SIZE && "invalid output length");
 #ifdef HMAC_debug
             if (inputLen == 64)

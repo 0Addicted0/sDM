@@ -10,6 +10,7 @@ namespace gem5
     namespace CME
     {
         extern int FAST_MODE;
+        extern uint64_t HMAC_COUNTER;
         void CMEdump(char *title, uint8_t *tptr, size_t sz);
         void dump(char *title, uint8_t *txt, int len);
         void ConstructOTP(sDM::Addr paddr2CL, uint8_t *counter, int counterLen, uint8_t *OTP);

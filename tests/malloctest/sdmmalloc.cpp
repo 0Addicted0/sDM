@@ -4,7 +4,7 @@ static unordered_map<void *, void *> addrmap; // 记录原起始地址
 void *sdmmalloc(size_t len)
 {
     len = (len & PAGE_ALIGN_MASK) + (len & (~PAGE_ALIGN_MASK) == 0 ? 0 : sDM_PAGE_SIZE); // 长度对齐
-    printf("sDMAlloc:size %ld KB\n", len/1024);
+    // printf("sDMAlloc:size %ld KB\n", len/1024);
     size_t newlen = len + sDM_PAGE_SIZE;
     void *mallocret = malloc(newlen);
     // printf("sDMAlloc:ret %p\n", mallocret);

@@ -72,8 +72,11 @@ namespace gem5
             std::map<Addr, uint64_t> sp_distrib; // addr <==> access count
             std::map<Tick, uint64_t> ti_distrib; // tick <==> access bytes
             std::string _name;
-
+            // 统计增量
+            uint64_t _dw, _dr, _dL1, _dL2, _denc, _ddec;
+            // 加解密/hash统计
         public:
+            uint64_t _encrypt_counter, _decrypt_counter,_dhash;
             uint64_t L1hits, L2hits, hits;
             uint64_t L1access, L2access, L1miss, L2miss;
             sDMstat(std::string name);
@@ -83,6 +86,10 @@ namespace gem5
             uint64_t getWriteCount();
             void print_tot();
             void print_cache();
+            void start();
+            void print_enc_dec();
+            void print_distrib();
+            void end(uint64_t &dw, uint64_t &dr, uint64_t &dL1, uint64_t &dL2, uint64_t &denc, uint64_t &ddec);
         };
         /**
          * @author
@@ -462,6 +469,8 @@ namespace gem5
             uint64_t onchip_cache_size;
             uint64_t onchip_cache_latency;
             uint64_t dram_cache_size;
+            uint64_t remoteMemAccessLatency;
+            uint64_t localMemAccessLatency;
             MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时,根据pid找到对应的sdm space表,查找此表对应到相应的space id vaddr <==> (page_num,space id)
@@ -469,7 +478,6 @@ namespace gem5
             sDMCache *KeypathCache; // L1 and L2
             sDMstat *lstat;         // 本地内存统计量
             sDMstat *rstat;         // 远端内存统计量
-
             sDMmanager(const sDMmanagerParams &p);
             ~sDMmanager();
 
@@ -501,6 +509,11 @@ namespace gem5
                 return sDMmanager::getPort(if_name, idx);
             }
             void AccessMemory(Addr addr, uint8_t *databuf, bool isread, uint8_t datasize);
+
+            void encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
+            void decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
+            void timer();     // 定时器在read/write开始调用
+            uint64_t delay(); // 返回本次Read/Write的时延
         };
     }
 }

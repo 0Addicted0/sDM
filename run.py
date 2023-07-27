@@ -10,24 +10,27 @@ def execute_gem5_command(command):
 
 if __name__ == "__main__":
     pwd = os.getcwd()
+    test_dir=f"{pwd}/tests/malloctest"
     pat='*.o'
-    binary_names = glob.glob(os.path.join(f'{pwd}/tests/malloctest', pat))
+    # binary_names = glob.glob(os.path.join(f'{pwd}/tests/malloctest', pat))
+    binary_names = ['aes.o']
+    modes = ['true','false']
     hash_lat=enc_lat=0
     processes = []
     for binary_name in binary_names:
-        gem5_command = f"build/X86/gem5.opt \
-            -d '{pwd}/m5/{binary_name}out' \
-            configs/example/se.py \
-            --caches --l1d_size=32kB --l1i_size=32kB --l1i_assoc=2 --l1d_assoc=4 \
-            --l2cache --l2_size=1MB --l2_assoc=16 \
-            --mem-type=DDR4_2400_8x8 --mem-size=2GB --pool_ids='0,1' \
-            --sDMenable=true --hash_lat={hash_lat} --enc_lat={enc_lat}\
-            --cpu-type=O3CPU \
-            --cmd='{pwd}/tests/malloctest/{binary_name}.o'"
-
-        process = multiprocessing.Process(target=execute_gem5_command, args=(gem5_command,))
-        processes.append(process)
-        process.start()
+        for mode in modes:
+            gem5_command = f"build/X86/gem5.opt \
+                -d '{pwd}/m5/{binary_name}-{mode}-out' \
+                configs/example/se.py \
+                --caches --l1d_size=128B --l1i_size=128B \
+                --mem-type=DDR3_1600_8x8 --mem-size=512MB --pool_ids='0,1;' \
+                --sDMenable={mode} --fast_mode=0 --hash_lat=16 --enc_lat=16 --onchip_cache_size=4 --onchip_cache_lat=8 --dram_cache_size=16 \
+                --cpu-type=TimingSimpleCPU \
+                --cmd='{test_dir}/{binary_name}' > log-{binary_name}-{mode}.txt"
+            process = multiprocessing.Process(target=execute_gem5_command, args=(gem5_command,))
+            processes.append(process)
+            process.start()
+            print(f"Running {gem5_command}")
 
     for process in processes:
         process.join()
