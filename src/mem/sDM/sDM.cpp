@@ -225,6 +225,7 @@ namespace gem5
         }
         sDMmanager::~sDMmanager()
         {
+            summary();
             delete (KeypathCache);
             delete (lstat);
             delete (rstat);
@@ -446,7 +447,7 @@ namespace gem5
                     int mid = (r + l) >> 1;
                     // 读取页的最后一个数据对(本身就需要减去自身的大小),还要除去local_jmp
                     // 因此减去PAIR_SIZE+sizeof(local_jmp)
-                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + mid * sDM_PAGE_SIZE + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp));
+                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + mid * sDM_PAGE_SIZE + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp) - PAIR_SIZE); // ignore fill_num
                     if ((rboundp->pnum + rboundp->cnum) * sDM_PAGE_SIZE >= offset)
                         r = mid;
                     else
@@ -458,19 +459,24 @@ namespace gem5
                 // ^                                ^
                 // i                                j
                 l = skip - 1;
-                r = sDM_PAGE_SIZE / PAIR_SIZE;
+                // r = sDM_PAGE_SIZE / PAIR_SIZE; // this will raise too many useless read
+                read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp));// Read fill_num
+                uint32_t fill_num = rboundp->cnum;
+                r = l + 1 + rboundp->cnum - 1 + 1; // rewind to the last data pair
+                int mid = l;
                 while (r - l > 1)
                 {
-                    int mid = (r + l) >> 1;
+                    mid = (r + l) >> 1;
                     read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (mid * PAIR_SIZE));
                     if ((rboundp->pnum + rboundp->cnum) * sDM_PAGE_SIZE > offset || // debug >= -> >
-                        (rboundp->cnum == -1 && rboundp->cnum == rboundp->pnum))    // 0xffffffffffffffff
+                        (rboundp->pnum == 0xffffffff && rboundp->cnum == fill_num))
                         r = mid;
                     else
                         l = mid;
                 }
                 // 在第r个数据对中找到所在页
-                read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (r * PAIR_SIZE));
+                if(mid != r)// 避免重读
+                    read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (r * PAIR_SIZE)); 
                 head = rboundp->curPageAddr;
                 head += offset - rboundp->pnum * sDM_PAGE_SIZE;
                 pnum = rboundp->pnum + (offset - rboundp->pnum * sDM_PAGE_SIZE) / sDM_PAGE_SIZE;
@@ -541,6 +547,7 @@ namespace gem5
                 skip = 1; // 构建1级 step=1
             // 计算除去skip指针后的可用的pair数量
             pair_per = ((sDM_PAGE_SIZE / PAIR_SIZE - 1) - skip);
+            pair_per--; // 保留一个数量字节,用户记录该本地页包含的数据对的数量
             return ceil(pair_num, pair_per);
         }
         /**
@@ -581,6 +588,7 @@ namespace gem5
                     }
                 }
                 // 然后填充数据对
+                int fill_num = 0;
                 for (int i = 0; i < ac_num; i++)
                 {
                     // 前skip的位置是skip_list的结构
@@ -589,9 +597,12 @@ namespace gem5
                     mem[cur].pair[skip + i].pnum = logic_npages;
                     logic_npages += remote_phy_list[cur_pair].npages; // 累计逻辑空间大小
                     cur_pair++;
+                    fill_num++;
                     if (cur_pair >= remote_phy_list.size())
                         break;
                 }
+                // patch避免在无效数据对上二分
+                mem[cur].pair[skip + ac_num].cnum = fill_num; // 记录本地页填充的数据对数量
                 mem[cur].cur_segMax.con = local_phy_list[cur_seg].npages - cur_k + 1;
                 cur_k++;
                 // 检查l_hmac_phy_list[cur_seg]起始的连续页是否用完
@@ -708,7 +719,6 @@ namespace gem5
                 }
                 addr += sDM_PAGE_SIZE >> 1;
             }
-            // printf("in sDMspace_init HMAC done\n");
             //  构建iit
             uint64_t leaf_num = byte_size / (IIT_LEAF_ARITY * CL_SIZE);
             uint64_t iitpPageindex = 0;
@@ -752,10 +762,9 @@ namespace gem5
                 }
                 leaf = false;
                 leaf_num = ceil(leaf_num, IIT_MID_ARITY); // 下一层的结点数
-                if (curh == h) // 单独存储片上根
-                    memcpy((uint8_t *)(&sp.Root), (uint8_t *)(&node), sizeof(iit_Node));
                 curh++;
             }
+            memcpy((uint8_t *)(&sp.Root), (uint8_t *)(&node), sizeof(iit_Node));// 单独存储片上根
             // printf("[%ld]sDM space initialization completed\n", curTick());
             return;
         }
@@ -769,14 +778,17 @@ namespace gem5
             sdmID id = isContained(pid, vaddr);
             if (id == INVALID_SPACE)
                 return false;
-            printf("remote memory:\n");
-            rstat->print_tot();
-            printf("local memory:\n");
-            lstat->print_tot();
-            printf("cache:\n");
-            lstat->print_cache();
-            printf("encrypt and decrypt:\n");
-            lstat->print_enc_dec();
+            printf("[%ld]in sDMspace_free:\n", curTick());
+            printf("\tpid=%ld\n", pid);
+            printf("\tvaddr=0x%lx\n", vaddr);
+            const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(vaddr);
+            assert(entry && "addr is unmapped");
+            printf("\tpaddr=0x%lx\n", entry->paddr);
+            printf("\tsize=%ldkB\n", sdm_table[id].sDataSize / 1024);
+            printf("\tspace_id=%ld\n", id);
+            sdm_table.erase(sdm_table.begin() + id);
+            if(sdm_table.size() == 1)
+                summary();
             return true;
         }
         /**
@@ -796,7 +808,7 @@ namespace gem5
                    "vaddr or size is not aligned pagesize");
 
             const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(vaddr);
-            assert(entry != NULL);
+            assert(entry && "vaddr is not mapped");
             // 准备新空间的metadata
             sdm_space sp;
             // 1. 计算data大小
@@ -876,7 +888,7 @@ namespace gem5
 \tspace_id=%ld\n\
 \tiit_size =%ldB\n\
 \tHMAC_size=%ldB\n\
-\th=%dlayers(root included)\n\
+\th=%dlayers(Loot included)\n\
 \tHMAC pageAddrSet paddr=0x%lx\n\
 \tiMT  pageAddrSet paddr=0x%lx\n",
                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
@@ -1392,6 +1404,15 @@ namespace gem5
          * @attention 计算公式: L1hits * onchip_cache_latency()
          * 
         */
+       uint64_t
+       sDMmanager::formula(uint64_t local_dL1, uint64_t local_dL2, uint64_t local_acc, uint64_t remote_acc, uint64_t enc_dec, uint64_t dhash)
+       {
+            uint64_t latency = KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
+                               localMemAccessLatency * (local_acc) +
+                               remoteMemAccessLatency * (remote_acc) +
+                               encrypt_latency * (enc_dec) + hash_latency * (dhash);
+            return latency;
+       }
        uint64_t sDMmanager::delay()
        {
             uint64_t local_dw, local_dr, local_dL1, local_dL2, local_denc, local_ddec;
@@ -1401,11 +1422,19 @@ namespace gem5
             lstat->end(local_dw, local_dr, local_dL1, local_dL2, local_denc, local_ddec);
             rstat->end(remote_dw, remote_dr, remote_dL1, remote_dL2, remote_denc, remote_ddec);
             // 计算延迟
-            uint64_t latency = KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 +
-                               KeypathCache->L2Cache->latency * (local_dw + local_dr) +
-                               KeypathCache->RemoteMemAccessLatency * (remote_dw + remote_dr) +
-                               encrypt_latency * (local_denc + local_ddec) + hash_latency * dhash;
-            printf("add lat:%ld\n", latency);
+            uint64_t latency = formula(local_dL1, local_dL2, (local_dw + local_dr), (remote_dw + remote_dr), (local_denc + local_ddec), dhash);
+                            // KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
+                            //                    localMemAccessLatency * (local_dw + local_dr) +
+                            //                    remoteMemAccessLatency * (remote_dw + remote_dr) +
+                            //                    encrypt_latency * (local_denc + local_ddec) + hash_latency * dhash;
+            // printf("extra latency:%ld {rAcc:%ld lAcc:%ld enc_dec:%ld hash:%ld L1:%ld L2:%ld}\n", 
+            //         latency,
+            //         remote_dw + remote_dr,
+            //         local_dw + local_dr,
+            //         local_denc + local_ddec, 
+            //         dhash, 
+            //         local_dL1, 
+            //         local_dL2);
             return latency;
        }
        void sDMmanager::decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL)
@@ -1417,6 +1446,47 @@ namespace gem5
        {
             lstat->_encrypt_counter++;
             CME::sDM_Encrypt(plaint, counter, counterLen, paddr2CL, key2EncryptionCL);
+       }
+       void sDMmanager::summary()
+       {
+            
+            uint64_t tot = 0;
+            // tot = formula(lstat->L1hits,
+            //               lstat->L2hits,
+            //               lstat->getReadCount() + lstat->getWriteCount(),
+            //               rstat->getReadCount() + rstat->getWriteCount(),
+            //               lstat->_encrypt_counter + lstat->_decrypt_counter,
+            //               CME::HMAC_COUNTER) / 1000;
+            uint64_t L1 = lstat->L1hits * KeypathCache->L1Cache->latency / 1000;
+            uint64_t L2 = lstat->L2hits * KeypathCache->L2Cache->latency / 1000;
+            uint64_t local = (lstat->getReadCount() + lstat->getWriteCount()) * localMemAccessLatency / 1000;
+            uint64_t remote = (rstat->getReadCount() + rstat->getWriteCount()) * localMemAccessLatency / 1000;
+            uint64_t enc_dec = (lstat->_encrypt_counter + lstat->_decrypt_counter) * encrypt_latency / 1000;
+            uint64_t hash = (CME::HMAC_COUNTER) * hash_latency / 1000;
+            tot = L1 + L2 + local + remote + enc_dec + hash;
+
+            printf("\n+------------------------------------+\n");
+            printf("|              Summary               |\n");
+            printf("+------------------------------------+\n");
+            printf("|Total Latency:%13ld (Cycles)|\n", tot);
+            printf("|Total L1Latency:%11ld (Cylces)|  P:%.2lf%\n", L1, (double)L1/(double)tot*100.0);
+            printf("|Total L2Latency:%11ld (Cylces)|  P:%.2lf%\n", L2, (double)L2/(double)tot*100.0);
+            printf("|Total lAccLat:%13ld (Cylces)|  P:%.2lf%\n", local, (double)local/(double)tot*100.0);
+            printf("|Total rAccLat:%13ld (Cylces)|  P:%.2lf%\n", remote, (double)remote/(double)tot*100.0);
+            printf("|Total enc_decLat:%10ld (Cylces)|  P:%.2lf%\n", enc_dec, (double)enc_dec/(double)tot * 100.0);
+            printf("|Total hashLat:%13ld (Cylces)|  P:%.2lf%\n", hash, (double)hash/(double)tot*100.0);
+            printf("+------------------------------------+\n\n");
+            printf("+------------------------------------+\n");
+            printf("|              Details               |\n");
+            printf("+------------------------------------+\n");
+            printf("|remote memory:\n");
+            rstat->print_tot();
+            printf("|local memory:\n");
+            lstat->print_tot();
+            printf("|cache:\n");
+            lstat->print_cache();
+            printf("|encrypt and decrypt:\n");
+            lstat->print_enc_dec();
        }
     }
 }

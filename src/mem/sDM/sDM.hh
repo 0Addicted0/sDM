@@ -513,7 +513,9 @@ namespace gem5
             void encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
             void decrypt(uint8_t *cipher, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
             void timer();     // 定时器在read/write开始调用
+            uint64_t formula(uint64_t local_dL1, uint64_t local_dL2, uint64_t local_acc, uint64_t remote_acc, uint64_t enc_dec, uint64_t dhash);
             uint64_t delay(); // 返回本次Read/Write的时延
+            void summary();
         };
     }
 }

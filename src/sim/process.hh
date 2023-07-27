@@ -71,7 +71,7 @@ namespace gem5
   public:
     Process(const ProcessParams &params, EmulationPageTable *pTable,
             loader::ObjectFile *obj_file);
-
+    ~Process();
     void serialize(CheckpointOut &cp) const override;
     void unserialize(CheckpointIn &cp) override;
 
@@ -310,6 +310,7 @@ namespace gem5
 
     // sDM class
     sDM::sDMmanager *sDMmanager;
+    uint32_t ind;
   };
 
 } // namespace gem5

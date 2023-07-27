@@ -187,17 +187,23 @@ namespace gem5
         // sDMmanager->remote_pool_id = pool_ids[0];
         // 默认将可用池的第二个视作本地内存
         // sDMmanager->local_pool_id = pool_ids[1];
-        if(sDMmanager)
+        ind = -1;
+        if (sDMmanager)
         {
             sDMenable = true;
             sDMmanager->mem_pools = &(this->seWorkload->memPools);
             sDMmanager->process = this;
             // printf("process.cc:process=%p,sDMmanager=%p\n", this, sDMmanager);
             sDMmanagers.push_back(sDMmanager);
+            ind = sDMmanagers.size() - 1;
         }
         // system->proc.push_back(this);
     }
-
+    Process::~Process()
+    {
+        delete sDMmanager;
+        sDMmanagers.erase(sDMmanagers.begin() + ind);
+    }
     void
     Process::clone(ThreadContext *otc, ThreadContext *ntc,
                    Process *np, RegVal flags)

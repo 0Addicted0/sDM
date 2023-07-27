@@ -186,7 +186,7 @@ namespace gem5
          */
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
-            HMAC_COUNTER++;
+            // HMAC_COUNTER++;
             memset(hmac, 0, hmacLen);
             if(FAST_MODE)
                 return;
@@ -219,6 +219,7 @@ namespace gem5
             sm3::SM3_256(V, SM3_SIZE + SM3_SIZE, p1);
             //  cut
             memcpy(hmac, p1, hmacLen);
+            HMAC_COUNTER++;
 #ifdef HMAC_debug
             if (inputLen == 64)
                 dump("HMAC", hmac, hmacLen);

@@ -3,11 +3,11 @@
 ########################
 # compile test program #
 ########################
-# pwd
-# cd tests/malloctest
-# rm -f *.o
-# make -j$(nproc)
-# cd ../../
+pwd
+cd tests/malloctest
+rm -f *.o
+make -j$(nproc)
+cd ../../
 
 ########################
 # build simulator Gem5 #
