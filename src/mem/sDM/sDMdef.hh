@@ -45,6 +45,8 @@
 #define HASH_KEY_TYPE 0
 #define CME_KEY_TYPE 1
 #define INVALID_SPACE 0
+#define ID_OFFSET 38
+#define ID_HMAC_ (1ULL << (ID_OFFSET - 2)) // 区分HMAC和iMT缓存
 namespace gem5
 {
     namespace sDM

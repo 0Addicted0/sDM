@@ -70,6 +70,8 @@ namespace gem5
             L1access = 0, L2access = 0, L1miss = 0, L2miss = 0;
             _dw = _dr = _dL1 = _dL2 = 0;
             _encrypt_counter = _decrypt_counter = 0;
+            HotPageCachehit = HotPageCachemiss = CtrFilterHits = CtrFiltermiss = 0;
+            CtrBackupHits = 0;
         }
         sDMstat::~sDMstat()
         {
@@ -166,16 +168,15 @@ namespace gem5
         sDMmanager::sDMmanager(const sDMmanagerParams &params) : ClockedObject(params),
                                                                  memPort(params.name + ".mem_side", this),
                                                                  _requestorId(params.system->getRequestorId(this)),
-                                                                 //  process(params.process),
                                                                  local_pool_id(params.local_pool_id),
                                                                  remote_pool_id(params.remote_pool_id),
                                                                  hash_latency(params.hash_latency),
                                                                  encrypt_latency(params.encrypt_latency),
                                                                  onchip_cache_size(params.onchip_cache_size),
-                                                                 dram_cache_size(params.dram_cache_size),
                                                                  onchip_cache_latency(params.onchip_cache_latency),
-                                                                 localMemAccessLatency(params.local_mem_latency),
-                                                                 remoteMemAccessLatency(params.remote_mem_latency)
+                                                                 dram_cache_size(params.dram_cache_size),
+                                                                 remoteMemAccessLatency(params.remote_mem_latency),
+                                                                 localMemAccessLatency(params.local_mem_latency)
         {
             // has_recv = false;
             // pkt_recv = NULL;
@@ -211,17 +212,20 @@ namespace gem5
             printf("+-----------------------------------+\n");
             printf("|dram_cache_size     (Bytes)=%7ld|\n", dram_cache_size * CL_SIZE);
             printf("|onchip_cache_size   (Bytes)=%7ld|\n", onchip_cache_size * CL_SIZE);
-            printf("|hash_latency        (Cycle)=%7ld|\n", params.hash_latency);
-            printf("|encrypt_latency     (Cycle)=%7ld|\n", params.encrypt_latency);
-            printf("|onchip_cache_latency(Cycle)=%7ld|\n", params.onchip_cache_latency);
-            printf("|local_Mem_latency   (Cycle)=%7ld|\n", params.local_mem_latency);
-            printf("|remote_Mem_latency  (Cycle)=%7ld|\n", params.remote_mem_latency);
+            printf("|addr_cache_size     (Bytes)=%7ld|\n", onchip_cache_size * CL_SIZE);
+            printf("|hash_latency        (Cycle)=%7d|\n", params.hash_latency);
+            printf("|encrypt_latency     (Cycle)=%7d|\n", params.encrypt_latency);
+            printf("|onchip_cache_latency(Cycle)=%7d|\n", params.onchip_cache_latency);
+            printf("|local_Mem_latency   (Cycle)=%7d|\n", params.local_mem_latency);
+            printf("|remote_Mem_latency  (Cycle)=%7d|\n", params.remote_mem_latency);
             printf("+-----------------------------------+\n");
             sdm_space_cnt = 0;
             sdm_table.assign(1, sdm_space());
 
             KeypathCache = new sDMCache(this, onchip_cache_size, dram_cache_size,
                                         onchip_cache_latency, localMemAccessLatency, remoteMemAccessLatency);
+            HotPageCache = new sDMLFUCache(this,dram_cache_size,sDM_PAGE_SIZE>>1);
+            addrCache = new sDMAddrCache(this, onchip_cache_size, _LRU, 0);
             lstat = new sDMstat("local_mem_stat");
             rstat = new sDMstat("remote_mem_stat");
         }
@@ -277,7 +281,6 @@ namespace gem5
             {
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
                 lstat->addstat(gem5_addr, byte_size, true);
-                // printf("Read local Mem:%s\n", pkt->print().c_str());
                 // memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
                 sDMdrams[local_pool_id]->access(pkt);
             }
@@ -307,15 +310,15 @@ namespace gem5
             if (sDMdrams[remote_pool_id]->getAddrRange().contains(gem5_addr))
             {
                 rstat->addstat(gem5_addr, byte_size, false);
-                memcpy(sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), data, byte_size);
-                // sDMdrams[remote_pool_id]->access(pkt);
+                // memcpy(sDMdrams[remote_pool_id]->toHostAddr(gem5_addr), data, byte_size);
+                sDMdrams[remote_pool_id]->access(pkt);
             }
             else
             {
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
                 lstat->addstat(gem5_addr, byte_size, false);
-                memcpy(sDMdrams[local_pool_id]->toHostAddr(gem5_addr), data, byte_size);
-                // sDMdrams[local_pool_id]->access(pkt);
+                // memcpy(sDMdrams[local_pool_id]->toHostAddr(gem5_addr), data, byte_size);
+                sDMdrams[local_pool_id]->access(pkt);
             }
             delete pkt;
             return;
@@ -507,7 +510,7 @@ namespace gem5
          */
         int sDMmanager::getKeyPath(sdmID id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode)
         {
-            int pnum = 0; // 目标页前面有多少逻辑页
+            [[maybe_unused]]int pnum = 0; // 目标页前面有多少逻辑页
             uint32_t h = sdm_table[id].iITh;
             uint64_t nodenums = sdm_table[id].sDataSize / (IIT_LEAF_ARITY * CL_SIZE); // 叶节点数,之后表示当前层的节点数
             uint64_t offset = (rva / (CL_SIZE * IIT_LEAF_ARITY));                     // 该偏移对应哪一个叶节点，之后表示相对当前层的节点偏移量
@@ -520,7 +523,17 @@ namespace gem5
                 if (i && (((keyPathAddr[i - 1] + offsetiit - lastOff) & PAGE_ALIGN_MASK) == (keyPathAddr[i - 1] & PAGE_ALIGN_MASK)))
                     NodePAddr = keyPathAddr[i - 1] + offsetiit - lastOff;
                 else
-                    NodePAddr = find((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip, 0, pnum);
+                {
+                    // NodePAddr = find((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip, 0, pnum);
+                    //  => 查找缓存 构建伪虚拟地址 pesudo_vaddr=((id<<40) | offsetiit) & page_align_mask
+                    addrCache->set((Addr)sdm_table[id].iITPtrPagePtr, offsetiit, sdm_table[id].iit_skip);
+                    uint64_t pseudo_vaddr = ((id << ID_OFFSET) | offsetiit) & PAGE_ALIGN_MASK;
+                    NodePAddr = (addrCache->access(pseudo_vaddr)) | (offsetiit & (sDM_PAGE_SIZE - 1));
+                    // if(NodePAddr != tNodePAddr)
+                    //     printf("[error]");
+                    // printf("iMT_ADDR_CACHE [%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, tNodePAddr=0x%lx, *NodePAddr=0x%lx\n", curTick(), rva, offsetiit, pseudo_vaddr, tNodePAddr, NodePAddr);
+                    // pnum = addrCache->pnum;// maybe useless
+                } 
                 keyPathAddr[i] = NodePAddr; // 目标节点的远端物理地址
                 lastOff = offsetiit;        // 上个node的偏移量
                 // read4Mem(sizeof(iit_Node), (u_int8_t *)(&keyPathNode[i]), NodePAddr); // 从缓存中取得
@@ -902,13 +915,15 @@ namespace gem5
 \tspace_id=%ld\n\
 \tiit_size =%ldB\n\
 \tHMAC_size=%ldB\n\
-\th=%dlayers(Loot included)\n",
+\th=%dLayers(root included)\n",
                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id,
                    iit_size, hmac_size, sp.iITh);
-// \tHMAC pageAddrSet paddr=0x%lx\n\
-// \tiMT  pageAddrSet paddr=0x%lx\n",
-            //                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
-            //                    r_hmac_phy_list[0].start, r_iit_phy_list[0].start);
+/*
+            \tHMAC pageAddrSet paddr=0x%lx\n\
+\tiMT  pageAddrSet paddr=0x%lx\n",
+                               curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
+                               r_hmac_phy_list[0].start, r_iit_phy_list[0].start);
+*/
             return true;
         }
         /**
@@ -945,16 +960,28 @@ namespace gem5
             uint8_t calc_hmac[SM3_SIZE];
             // 读取所在半页的内存数据
             read4Mem(sDM_PAGE_SIZE >> 1, hpg_data, pageAddr);
+            // if (!HotPageCache->CacheAccess(pageAddr, hpg_data, true)) {
+            //     read4Mem(sDM_PAGE_SIZE >> 1, hpg_data, pageAddr);
+            // }
             //  计算HMAC
             hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
             // 与存储值比较
-            int pnum = 0;
+            [[maybe_unused]]int pnum = 0;
+            uint64_t offset = (rva / (sDM_PAGE_SIZE >> 1)) * SM3_SIZE;
             // rva是数据的虚拟空间的相对偏移，需按半页转换成hmac存储空间的相对偏移
-            *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, (rva / (sDM_PAGE_SIZE >> 1)) * SM3_SIZE, sdm_table[id].hmac_skip, 0, pnum);
+            // *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, offset, sdm_table[id].hmac_skip, 0, pnum);
+            // => 缓存
+            addrCache->set((Addr)sdm_table[id].HMACPtrPagePtr, offset, sdm_table[id].hmac_skip);
+            uint64_t pseudo_vaddr = ((id << ID_OFFSET) | (ID_HMAC_) | offset) & PAGE_ALIGN_MASK;
+            *hmacAddr = (addrCache->access(pseudo_vaddr)) | (offset & (sDM_PAGE_SIZE - 1));
+            // if(*hmacAddr != thmacAddr)
+            //     printf("[error]");
+            // printf("HMAC_ADDR_CACHE[%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, thmacAddr=0x%lx, *hmacAddr=0x%lx\n", curTick(), rva, offset, pseudo_vaddr, thmacAddr, *hmacAddr);
+            // *hmacAddr = thmacAddr;
+            // pnum = addrCache->pnum; // maybe useless
             sdm_HMAC stored_hmac;
-            // 从本地内存中读取
+            // 从内存中读取HMAC
             read4Mem(sizeof(sdm_HMAC), stored_hmac, *hmacAddr);
-
             assert(memcmp(calc_hmac, stored_hmac, sizeof(sdm_HMAC)) == 0 && "HMAC verify failed");
             return true;
         }
@@ -1158,6 +1185,7 @@ namespace gem5
                         memcpy(aligned_mem_ptr, hpg_data + i * CL_SIZE, CL_SIZE);
                     else // 否则需要发起新的写请求
                         write2Mem(CL_SIZE, hpg_data + i * CL_SIZE, hpaddr + i * CL_SIZE);
+                    // HotPageCache->hPageinAccess(hpaddr + i * CL_SIZE, hpg_data + i * CL_SIZE, CL_SIZE, 0);
                 }
             }
             else
@@ -1178,6 +1206,7 @@ namespace gem5
                 // 将重新加密好的cacheLine写回到内存
                 // 已经在abstract_mem中对齐，现在写入到aligned_mem_ptr即可
                 memcpy(aligned_mem_ptr, hpg_data + off * CL_SIZE, CL_SIZE);
+                // HotPageCache->hPageinAccess(clpaddr, hpg_data + off * CL_SIZE, CL_SIZE, 0);
             }
             // 2. 重新计算HMAC并写入到远端内存
             uint8_t hmac[CL_SIZE >> 1];
@@ -1272,18 +1301,18 @@ namespace gem5
             return ret;
         }
 
-        /**
+       /**
          * @brief
          * @param key
          * @param value
-         * @param isRead 1是读，0是写
+         * @param isread 1是读，0是写
          * @return
-         */
-        bool sDMmanager::sDMLRUCache::access(Addr key, uint8_t *value, bool isRead)
+        */
+        int sDMmanager::sDMLRUCache::access(Addr key, uint8_t* value, bool isread)
         {
             if (keypathcache.count(key) > 0)
             { // hit
-                if (isRead)
+                if (isread)
                 {
                     memcpy(value, keypathcache[key]->value, 64); // 读出数据
                 }
@@ -1478,22 +1507,29 @@ namespace gem5
             //               CME::HMAC_COUNTER) / 1000;
             uint64_t L1 = lstat->L1hits * KeypathCache->L1Cache->latency / 1000;
             uint64_t L2 = lstat->L2hits * KeypathCache->L2Cache->latency / 1000;
+            uint64_t addrCacheLat = (addrCache->_hits + addrCache->_miss) * addrCache->_tag_latency + addrCache->_hits * onchip_cache_latency / 1000;
             uint64_t local = (lstat->getReadCount() + lstat->getWriteCount()) * localMemAccessLatency / 1000;
             uint64_t remote = (rstat->getReadCount() + rstat->getWriteCount()) * localMemAccessLatency / 1000;
             uint64_t enc_dec = (lstat->_encrypt_counter + lstat->_decrypt_counter) * encrypt_latency / 1000;
             uint64_t hash = (CME::HMAC_COUNTER)*hash_latency / 1000;
-            tot = L1 + L2 + local + remote + enc_dec + hash;
+            tot = L1 + L2 + addrCacheLat + local + remote + enc_dec + hash;
 
             printf("\n+------------------------------------+\n");
             printf("|              Summary               |\n");
             printf("+------------------------------------+\n");
             printf("|Total Latency:%13ld (Cycles)|\n", tot);
-            printf("|Total L1Latency:%11ld (Cylces)|  P:%.4lf%\n", L1, (double)L1 / (double)tot * 100.0);
-            printf("|Total L2Latency:%11ld (Cylces)|  P:%.4lf%\n", L2, (double)L2 / (double)tot * 100.0);
-            printf("|Total lMemAccLat:%10ld (Cylces)|  P:%.4lf%\n", local, (double)local / (double)tot * 100.0);
-            printf("|Total rMemAccLat:%10ld (Cylces)|  P:%.4lf%\n", remote, (double)remote / (double)tot * 100.0);
-            printf("|Total enc_decLat:%10ld (Cylces)|  P:%.4lf%\n", enc_dec, (double)enc_dec / (double)tot * 100.0);
-            printf("|Total hashLat:%13ld (Cylces)|  P:%.4lf%\n", hash, (double)hash / (double)tot * 100.0);
+            printf("|Total L1Latency:%11ld (Cylces)|  P:%3.4lf%%\n", L1, (double)L1 / (double)tot * 100.0);
+            printf("|Total AddrCache:%11ld (Cylces)|  P:%3.4lf%%\n", addrCacheLat, (double)addrCacheLat / (double)tot * 100.0);
+            printf("|Total L2Latency:%11ld (Cylces)|  P:%3.4lf%%\n", L2, (double)L2 / (double)tot * 100.0);
+            printf("|Total lMemAccLat:%10ld (Cylces)|  P:%3.4lf%%\n", local, (double)local / (double)tot * 100.0);
+            printf("|Total rMemAccLat:%10ld (Cylces)|  P:%3.4lf%%\n", remote, (double)remote / (double)tot * 100.0);
+            printf("|Total enc_decLat:%10ld (Cylces)|  P:%3.4lf%%\n", enc_dec, (double)enc_dec / (double)tot * 100.0);
+            printf("|Total hashLat:%13ld (Cylces)|  P:%3.4lf%%\n", hash, (double)hash / (double)tot * 100.0);
+            printf("+------------------------------------+\n");
+            if((double)(addrCache->_hits + addrCache->_miss) != 0)
+                printf("|AddrTrans hitRates:%6.4lf(%%)      |\n", (double)addrCache->_hits / (double)(addrCache->_hits + addrCache->_miss) * 100.0);
+            else 
+                printf("|AddrTrans hitRates:--(%%)          |\n");
             printf("+------------------------------------+\n\n");
             printf("+------------------------------------+\n");
             printf("|              Details               |\n");
@@ -1504,8 +1540,280 @@ namespace gem5
             lstat->print_tot();
             printf("# cache:\n");
             lstat->print_cache();
+            printf("# addr cache:\n");
+            addrCache->print_cache();
             printf("# encrypt and decrypt:\n");
             lstat->print_enc_dec();
+        }
+
+        bool sDMmanager::sDMLFUCache::Insert2Ctrlink(Addr key, CtrLinkNode *Node, uint64_t ctr, uint8_t *retbuf, bool isinLink = 1)
+        {
+            bool ret = false;
+
+            if (isinLink)
+            {
+                // 调整原来的链
+                Node->Next->Pre = Node->Pre;
+                Node->Pre->Next = Node->Next;
+                --count;
+                uint64_t oldctr = KeytoFreq[key];
+                if (FreqtoCtrLink[oldctr]->head->Next == FreqtoCtrLink[oldctr]->tail)
+                {
+                    // 旧链为空链，回收
+                    RecoverCtrLink(oldctr);
+                }
+            }
+            else
+            {
+                KeytoCtrLinkNode[key] = Node;
+            }
+            // 插入到ctr对应链的链尾
+            if (FreqtoCtrLink.count(ctr) == 0)
+            {
+                // 不存在这个链，从初始化时创建的备用链表中选择一个,创建对应链。
+                auto newCtrLinkptr = CtrLinks.front();
+                CtrLinks.pop();
+                FreqtoCtrLink[ctr] = newCtrLinkptr;
+                minFreq.push(ctr);
+            }
+            // 存在则直接插入
+            auto tail = FreqtoCtrLink[ctr]->tail;
+            Node->Next = tail;
+            Node->Pre = tail->Pre;
+            tail->Pre->Next = Node;
+            tail->Pre = Node;
+
+            KeytoFreq[key] = ctr;
+
+            ++count;
+            if (count > capacity)
+            {
+                --count;
+                Evict(retbuf);
+                ret = true;
+            }
+            return ret;
+        }
+
+        /**
+         * @brief Cache访问API
+         * @param key 数据地址
+         * @param value 数据buf
+         * @param retbuf 如果有被驱逐的数据，存放在retbuf中。结构：
+         * |---------2048-----------|---8---|--8--|  需要预先分配2048+8+8=2064个字节的数据缓冲区
+         * |<-  被驱逐的半页数据  ->|-haddr-|-ctr-|
+         * @param Pagectr 被访问页的计数器
+         * @param isread 读数据还是写数据
+         * @return 返回true表示命中
+         */
+        bool sDMmanager::sDMLFUCache::CacheAccess(Addr key, uint8_t *value, bool isread)
+        {
+            uint8_t *retbuf = (uint8_t *)malloc(sizeof(uint8_t) * (2048 + 8 + 8));
+            bool ret;
+            if (KeytoCtrLinkNode.count(key) > 0)
+            {
+                // hit
+                sDMmanagerptr->lstat->HotPageCachehit++;
+                if (isread)
+                {
+                    memcpy(value, KeytoCtrLinkNode[key]->CacheLineAddr, CacheLinesize);
+                }
+                else
+                {
+                    memcpy(KeytoCtrLinkNode[key]->CacheLineAddr, value, CacheLinesize);
+                }
+                uint64_t ctr = KeytoFreq[key];
+                CtrLinkNode *Node = KeytoCtrLinkNode[key];
+                Insert2Ctrlink(key, Node, ctr + 1, retbuf, 1); // 从原来的链表中摘除，插入到ctr+1的那条链中
+
+                ret = false;
+            }
+            else
+            {
+                // miss
+                sDMmanagerptr->lstat->HotPageCachemiss++;
+                ret = false;
+                uint64_t curHpagectr = 0;
+                if (CtrFilter->access(key, (uint8_t *)(&curHpagectr), 0))
+                {
+                    // 不在缓存中，但是在过滤器中，判断是否为热页面
+                    curHpagectr++;
+                    if (curHpagectr > Threshold)
+                    {
+                        // 识别为热页面，加入缓存
+                        CtrLinkNode *newCtrLinkNode = (CtrLinkNode *)malloc(sizeof(CtrLinkNode));
+                        newCtrLinkNode->CacheLineAddr = (uint8_t *)malloc(sizeof(uint8_t) * CacheLinesize);
+                        newCtrLinkNode->hpageaddr = key;
+                        // read from remote mem
+                        sDMmanagerptr->read4Mem(CacheLinesize, (uint8_t *)newCtrLinkNode->CacheLineAddr, key);
+                        if (isread)
+                        {
+                            memcpy(value, newCtrLinkNode->CacheLineAddr, CacheLinesize);
+                        }
+                        else
+                        {
+                            memcpy(newCtrLinkNode->CacheLineAddr, value, CacheLinesize);
+                        }
+                        // 新插入的计数器先初始化为0
+                        ret = Insert2Ctrlink(key, newCtrLinkNode, 0, retbuf, 0); // 一定不在链中
+                        uint8_t *CtrFilterrebuf = (uint8_t *)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + 8));
+                        // 从计数器过滤器中逐出
+                        CtrFilter->Evict(CtrFilterrebuf);
+                        free(CtrFilterrebuf);
+                    }
+                    else
+                    {
+                        // 写入增加后的计数器
+                        CtrFilter->access(key, (uint8_t *)(&curHpagectr), 1);
+                        ret = false;
+                    }
+                }
+                else
+                {
+                    // 计数器不在计数器过滤器中，加入过滤器，ctr初始化为0
+                    uint64_t InitCtr = 0;
+                    uint8_t *CtrFilterretbuf = (uint8_t *)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + 8));
+                    if (CtrBackup.count(key) > 0)
+                    {
+                        // 先查看计数器备份
+                        InitCtr = CtrBackup[key];
+                        sDMmanagerptr->lstat->CtrBackupHits++;
+                        CtrBackup.erase(key); // 剔除备份，加入过滤器
+                        deletebackup(key);
+                    }
+                    // 加入过滤器
+                    if (CtrFilter->Write2Cache(key, (uint8_t *)(&InitCtr), (uint8_t *)(CtrFilterretbuf), 1))
+                    {
+                        // 过滤器逐出，加入备份
+                        uint64_t oldctr = *(Addr *)(CtrFilterretbuf);
+                        CtrBackup.insert(std::pair<Addr, uint64_t>(key, oldctr));
+                        sDMmanagerptr->lstat->CtrBackupHits++;
+                        LifeTimeCtr.push_back(key);
+                        if (CtrBackup.size() > CtrBackupsize)
+                        {
+                            Addr oldkey = LifeTimeCtr.front();
+                            LifeTimeCtr.erase(LifeTimeCtr.begin());
+                            CtrBackup.erase(oldkey);
+                            sDMmanagerptr->lstat->CtrBackupHits++;
+                        }
+                    }
+                    free(CtrFilterretbuf);
+                }
+
+                if (ret)
+                {
+                    // 新加入热页面后，热页面缓存溢出，需要把替换出的热页面对应的计数器加入过滤器中
+
+                    Addr hPageaddr = *(uint64_t *)(retbuf + 2048);
+                    uint64_t ctr = *(uint64_t *)(retbuf + 2048 + 8);
+                    ctr = Threshold / 2;
+                    uint8_t *ctrfilterretbuf = (uint8_t *)malloc(sizeof(char) * 64);
+                    uint8_t *databuf = (uint8_t *)malloc(sizeof(char) * CtrFilter->getCacheLinesize());
+                    memcpy(databuf, (uint8_t *)(&ctr), sizeof(uint64_t));
+                    bool ctrfilterret = CtrFilter->Write2Cache(hPageaddr, databuf, ctrfilterretbuf, 1);
+                    if (ctrfilterret)
+                    {
+                        // 写入内存计数器备份区
+                        CtrBackup.insert(std::pair<Addr, uint64_t>(hPageaddr, ctr));
+                        sDMmanagerptr->lstat->CtrBackupHits++;
+                        LifeTimeCtr.push_back(hPageaddr);
+                        if (CtrBackup.size() > CtrBackupsize)
+                        {
+                            Addr oldkey = LifeTimeCtr.front();
+                            LifeTimeCtr.erase(LifeTimeCtr.begin());
+                            CtrBackup.erase(oldkey);
+                            sDMmanagerptr->lstat->CtrBackupHits++;
+                        }
+                    }
+                    // 写入远端内存
+                    sDMmanagerptr->write2Mem(sDM_PAGE_SIZE >> 1, retbuf, hPageaddr);
+                    free(databuf);
+                    free(ctrfilterretbuf);
+                }
+            }
+            free(retbuf);
+            return ret;
+        }
+
+        void sDMmanager::sDMLFUCache::hPageinAccess(Addr addr, uint8_t *value, uint64_t bytesize, bool isread)
+        {
+            // 地址按半页对齐。
+            Addr hPageaddr = (addr & PAGE_ALIGN_MASK) | (addr & (sDM_PAGE_SIZE >> 1));
+            uint8_t *hPagedata = (uint8_t *)malloc(sizeof(uint8_t) * (sDM_PAGE_SIZE >> 1));
+            if(!CacheAccess(hPageaddr, hPagedata, isread)){
+                // 从远端读
+                if(isread){
+                sDMmanagerptr->read4Mem(sDM_PAGE_SIZE>>1,hPagedata,hPageaddr);}
+                else{
+                sDMmanagerptr->write2Mem(sDM_PAGE_SIZE >> 1, hPagedata, hPageaddr);
+                }
+            }
+            else
+            {
+                if (isread)
+                {
+                    memcpy(value, hPagedata + (hPageaddr - addr), bytesize);
+                }
+                else
+                {
+                    memcpy(hPagedata + (hPageaddr - addr), value, bytesize);
+                    CacheAccess(hPageaddr, hPagedata, isread);
+                }
+            }
+        }
+        /**
+         * @brief 驱逐计数器为ctr的最旧的缓存行
+         * @param retbuf 缓存行里的数据
+         * @param ctr
+         * @return
+         */
+        bool sDMmanager::sDMLFUCache::Evict(uint8_t *retbuf)
+        {
+
+            uint64_t ctr = minFreq.top(); // 最小值
+
+            auto oldNode = FreqtoCtrLink[ctr]->head->Next;
+            auto Addr = oldNode->hpageaddr;
+            oldNode->Next->Pre = FreqtoCtrLink[ctr]->head;
+            FreqtoCtrLink[ctr]->head->Next = oldNode->Next;
+            memcpy(retbuf, oldNode->CacheLineAddr, CacheLinesize);          // 保存旧数据
+            memcpy(retbuf + 2048, &(oldNode->hpageaddr), sizeof(uint64_t)); // 保存被驱逐时的缓存行对应的半页地址
+            memcpy(retbuf + 2048 + 8, (uint8_t *)(&ctr), sizeof(uint64_t)); // 保存被驱逐时的计数器
+
+            KeytoCtrLinkNode.erase(Addr);
+            KeytoFreq.erase(Addr);
+            free(oldNode->CacheLineAddr);
+            free(oldNode);
+            // 维护最小堆
+            if (FreqtoCtrLink[ctr]->head->Next == FreqtoCtrLink[ctr]->tail)
+            {
+                // 回收该ctr链
+                RecoverCtrLink(ctr);
+                minFreq.pop(); // 删除最小值
+            }
+            return true;
+        }
+        sDMmanager::sDMLFUCache::~sDMLFUCache()
+        {
+            for (auto it : FreqtoCtrLink)
+            {
+                auto head = it.second->head;
+                auto tail = it.second->tail;
+                while (head->Next != tail)
+                {
+                    auto old = head->Next;
+                    head->Next = old->Next;
+                    free(old->CacheLineAddr);
+                }
+            }
+        }
+        void
+        sDMmanager::sDMAddrCache::print_cache()
+        {
+            printf("\thit:%ld\n\tmiss:%ld\n\thit rate:%5.3lf\n",
+                   this->_hits,
+                   this->_miss,
+                   (double)(this->_hits) / (double)(this->_hits + this->_miss) * 100.0);
         }
     }
 }

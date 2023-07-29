@@ -18,6 +18,7 @@
 #include "sDMdef.hh"
 #include "./IIT/IIT.hh"
 #include "CME/CME.hh"
+#include "simpleCache.hh"
 
 #include "params/sDMmanager.hh"
 #include "base/types.hh"
@@ -34,6 +35,8 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <queue>
+#include <list>
 // #define SDMDEBUG 1 // 取消校验比较
 #define MAX_HEIGHT 5 // 32G
 /**
@@ -79,6 +82,7 @@ namespace gem5
             uint64_t _encrypt_counter, _decrypt_counter,_dhash;
             uint64_t L1hits, L2hits, hits;
             uint64_t L1access, L2access, L1miss, L2miss;
+            uint64_t HotPageCachehit,HotPageCachemiss,CtrFilterHits,CtrFiltermiss,CtrBackupHits;
             sDMstat(std::string name);
             ~sDMstat();
             void addstat(Addr addr, uint32_t byte_size, bool isRead);
@@ -287,18 +291,19 @@ namespace gem5
             {
                 typedef struct DLinkedNode
                 {
-                    uint64_t NodeAddr; // 节点地址
-                    // uint8_t* value = (uint8_t*)malloc(sizeof(uint8_t) * 64);  // 64 byte
-                    uint8_t value[64];
-                    DLinkedNode *pre;
-                    DLinkedNode *post;
+                    uint64_t NodeAddr = 0; // 节点地址
+                    //uint8_t* value = (uint8_t*)malloc(sizeof(uint8_t) * 64);  // 64 byte 
+                    DLinkedNode* pre;
+                    DLinkedNode* post;
+                    uint8_t value[64] = { 1 };
                 } DLinkedNode;
 
             private:
-                std::unordered_map<Addr, DLinkedNode *> keypathcache;
+                std::unordered_map<Addr, DLinkedNode*> keypathcache;
 
             private:
                 int count;
+                int Cachelinesize;
 
             private:
                 int capacity; // cache size(num of cache line)
@@ -309,12 +314,13 @@ namespace gem5
 
             public:
                 sDMmanager *sDMmanagerptr;
-                sDMLRUCache(int capacity, Tick latency, int ID, sDMmanager *sDMmanagerptr)
+                sDMLRUCache(int capacity, Tick latency, int ID, sDMmanager *sDMmanagerptr,int Cachelinesize)
                 {
                     this->count = 0;
                     this->capacity = capacity;
                     this->latency = latency;
                     this->CacheID = ID;
+                    this->Cachelinesize = Cachelinesize;
                     this->sDMmanagerptr = sDMmanagerptr;
 
                     head = new DLinkedNode();
@@ -350,16 +356,19 @@ namespace gem5
                     }
                 }
                 bool Write2Cache(Addr newNodeaddr, uint8_t *databuf, uint8_t *retbuf, uint64_t ID);
-
-            public:
-                /**
-                 * @brief
-                 * @param key
-                 * @param value
-                 * @param isread 1是读，0是写
-                 * @return
-                 */
-                bool access(Addr key, uint8_t *value, bool isread);
+                int access(Addr key, uint8_t *value, bool isread);
+                int getCacheLinesize() {
+                    return Cachelinesize;
+                }
+                void Evict(uint8_t *retbuf)
+                {
+                    DLinkedNode* oldtail = popTail();
+                    memcpy(retbuf, oldtail->value, Cachelinesize);
+                    memcpy(retbuf + Cachelinesize, (uint8_t*)(&oldtail->NodeAddr), 8);
+                    keypathcache.erase(oldtail->NodeAddr);
+                    removeNode(oldtail);
+                    free(oldtail);
+                }
 
             private:
                 void addNode(DLinkedNode *node)
@@ -405,8 +414,8 @@ namespace gem5
                 sDMCache(sDMmanager *sDMmanagerptr, int L1CacheCapacity = 0, int L2CacheCapacity = 0, Tick L1CacheLatency = 0,
                          Tick L2CacheLatency = 0, Tick RemoteMemAccessLatency = 0)
                 {
-                    this->L1Cache = new sDMLRUCache(L1CacheCapacity, L1CacheLatency, 1, sDMmanagerptr);
-                    this->L2Cache = new sDMLRUCache(L2CacheCapacity, L2CacheLatency, 2, sDMmanagerptr);
+                    this->L1Cache = new sDMLRUCache(L1CacheCapacity, L1CacheLatency, 1, sDMmanagerptr,64);
+                    this->L2Cache = new sDMLRUCache(L2CacheCapacity, L2CacheLatency, 2, sDMmanagerptr,64);
                     this->RemoteMemAccessLatency = RemoteMemAccessLatency;
                     this->sDMmanagerptr = sDMmanagerptr;
                 }
@@ -421,6 +430,125 @@ namespace gem5
                  * @return
                  */
                 Tick CacheAccess(Addr Nodeaddr, uint8_t *databuf, bool isread);
+            };
+            class sDMLFUCache {
+            private:
+                 struct CtrLinkNode {
+                    uint8_t* CacheLineAddr;
+                    //一个缓存行缓存半页数据。
+                    Addr hpageaddr; // 对应的物理地址（半页对齐），用于被驱逐时加入到过滤器中
+                    CtrLinkNode* Next;
+                    CtrLinkNode* Pre;
+                };
+                struct CtrLink      //具有相同countr的地址链，链首是最旧的地址cache line
+                                    //应该先淘汰
+                {
+                    CtrLinkNode* head = NULL;
+                    CtrLinkNode* tail = NULL;
+                    uint64_t ctr;   //该链对应的计数器
+                };
+                int count;
+                std::unordered_map<uint64_t, CtrLink*> FreqtoCtrLink;
+                std::unordered_map<Addr, CtrLinkNode*> KeytoCtrLinkNode;
+                std::unordered_map<Addr, uint64_t> KeytoFreq;
+                std::unordered_map<Addr, uint64_t> CtrBackup; // 内存上的计数器备份
+                std::list<uint64_t> LifeTimeCtr;  //在备份区淘汰存活时间最久的计数器备份
+                std::queue<CtrLink*> CtrLinks;  //计数器链表复用，减少重复申请空间
+                std::priority_queue<uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> minFreq;  // 快速找到最小的ctr。
+            private:
+                int capacity;   // cache size(num of cache line)
+                int CacheID;	// L1Cache or L2Cache
+                int Threshold;
+                int CtrBackupsize;  //计数器备份大小
+                uint64_t CacheLinesize = 0;
+                sDMLRUCache* CtrFilter;
+
+            public:
+                sDMLFUCache(sDMmanager* sDMmanagerptr, int capacity, uint64_t CacheLinesize = 4096 >> 1) {
+                    this->capacity = capacity;
+                    this->CacheLinesize = CacheLinesize;
+                    for (int i = 0; CtrLinks.size() < capacity + 1; i++) {
+                        CtrLinks.push(CreateCtrlink(i));
+                    }
+                    this->CtrFilter = new sDMLRUCache(128, 0, 1,sDMmanagerptr, sizeof(uint64_t));  //计数器大小sizeof(64)
+                    this->CtrBackupsize = 128;  //和计数器过滤器保持一致
+                }
+                ~sDMLFUCache();
+            public:
+                sDMmanager* sDMmanagerptr;
+                CtrLink* CreateCtrlink(uint64_t ctr) {
+                    if (FreqtoCtrLink.count(ctr) > 0) {
+                        printf("LRUCache(error):create an existed CtrLink");
+                        return NULL;
+                    }
+                    CtrLink* newCtrlink = (CtrLink*)malloc(sizeof(CtrLink));
+                    newCtrlink->head = (CtrLinkNode*)malloc(sizeof(CtrLinkNode));
+                    newCtrlink->tail = (CtrLinkNode*)malloc(sizeof(CtrLinkNode));
+                    newCtrlink->head->Next = newCtrlink->tail;
+                    newCtrlink->tail->Pre = newCtrlink->head;
+                    newCtrlink->ctr = 0;
+                    return newCtrlink;
+                }
+                void deleteCtrlink(uint64_t ctr) {
+                    if (FreqtoCtrLink.count(ctr) == 0) {
+                        printf("LFUCache(error):delete an invalid link\n");
+                        return;
+                    }
+                    //当且仅当一条ctr链没有任何数据的时候可以删除该链
+                    if (FreqtoCtrLink[ctr]->head->Next != FreqtoCtrLink[ctr]->tail)
+                    {
+                        printf("LFUCache(error):Not a empty CtrLink\n");
+                        return;
+                    }
+                    // printf("recover CtrLink ctr %d\n", ctr);
+                    CtrLinks.push(FreqtoCtrLink[ctr]);//回收CtrLink，用于复用
+                    FreqtoCtrLink.erase(ctr);
+                }
+                /**
+                 * @brief 回收一条空链，同时取消ctr到计数器链的映射
+                 * @param ctr
+                */
+                void RecoverCtrLink(uint64_t ctr) {
+                    deleteCtrlink(ctr);
+                }
+                bool Insert2Ctrlink(Addr key, CtrLinkNode* Node, uint64_t ctr, uint8_t* retbuf, bool isinLink);
+                bool CacheAccess(Addr key, uint8_t* value, bool isread);
+                void hPageinAccess(Addr addr, uint8_t* value, uint64_t bytesize, bool isread);
+                bool Evict(uint8_t* retbuf);
+                void deletebackup(uint64_t Addr) {
+                    for (auto it = LifeTimeCtr.begin(); it != LifeTimeCtr.end(); it++) {
+                        if ((*it) == Addr) {
+                            LifeTimeCtr.erase(it);
+                        }
+                    }
+                }
+            };
+            class sDMAddrCache : public simpleCache
+            {
+                public:
+                    sDMmanager *manager;
+                    Addr head, offset;
+                    int skip, pnum;
+                    sDMAddrCache(sDMmanager *manager,
+                                uint64_t cache_line_nums, 
+                                int evict_m = 0, 
+                                uint64_t tag_latency = 0) : simpleCache(cache_line_nums, evict_m, tag_latency)
+                    {
+                        this->manager = manager;
+                        std::cout << "Address Cache init!" << std::endl;
+                    };
+                    void set(uint64_t head, uint64_t offset, int skip)
+                    {
+                        this->head = head;
+                        this->offset = offset;
+                        this->skip = skip;
+                    };
+                    // construct function of Base-class cannot call 
+                    uint64_t _read(uint64_t tag) override
+                    {
+                        return (manager->find(head, offset, skip, 0, pnum)) & PAGE_ALIGN_MASK;
+                    };
+                    void print_cache();
             };
             class sDMPort : public RequestPort
             {
@@ -446,18 +574,13 @@ namespace gem5
                     panic("%s does not expect a retry\n", name());
                 }
             };
-            sDMPort memPort;
-            /**
-             * @author psj
-             * @brief 返回当前sDMmanager的_requestorId
-             */
-            RequestorID requestorId() { return _requestorId; }
 
             // private:
         public:
             // 数据页页指针集指针
             // sdm_dataPagePtrPagePtr dataPtrPagePtr;
             // std::vector<sdm_dataPagePtrPagePtr> dataPtrPage;
+            sDMPort memPort;
             RequestorID _requestorId;
             Process *process;    // 是为了使用pTable而引入与实际情况是不相符的
             sdmID sdm_space_cnt; // sDM_space编号器全局单增,2^64永远不会耗尽, start from 1
@@ -476,8 +599,14 @@ namespace gem5
             // 拦截每次的访存的vaddr时,根据pid找到对应的sdm space表,查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::unordered_map<uint64_t, std::map<Addr, std::pair<size_t, sdmID>>> sdm_paddr2id;
             sDMCache *KeypathCache; // L1 and L2
+            sDMLFUCache *HotPageCache; //HotPageCache
+            sDMAddrCache *addrCache; // 针对find函数的cache
             sDMstat *lstat;         // 本地内存统计量
             sDMstat *rstat;         // 远端内存统计量
+            /**
+             * @author psj
+             * @brief 返回当前sDMmanager的_requestorId
+             */
             sDMmanager(const sDMmanagerParams &p);
             ~sDMmanager();
 
@@ -508,6 +637,7 @@ namespace gem5
                     return memPort;
                 return sDMmanager::getPort(if_name, idx);
             }
+            RequestorID requestorId() { return _requestorId; }
             void AccessMemory(Addr addr, uint8_t *databuf, bool isread, uint8_t datasize);
 
             void encrypt(uint8_t *plaint, uint8_t *counter, int counterLen, sDM::Addr paddr2CL, uint8_t *key2EncryptionCL);
