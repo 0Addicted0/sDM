@@ -42,4 +42,5 @@ Import('*')
 
 SimObject('sDM.py', sim_objects=['sDMmanager'])
 
+Source('simpleCache.cpp')
 Source('sDM.cpp')
