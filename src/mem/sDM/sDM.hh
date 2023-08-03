@@ -37,6 +37,7 @@
 #include <vector>
 #include <queue>
 #include <list>
+#include <set>
 // #define SDMDEBUG 1 // 取消校验比较
 #define MAX_HEIGHT 5 // 32G
 /**
@@ -332,19 +333,17 @@ namespace gem5
                     head->post = tail;
                     tail->pre = head;
                 }
-                ~sDMLRUCache()
-                {
+                ~sDMLRUCache() {
                     while (head != tail)
                     {
                         auto it = head->post;
-                        delete (head);
+                        delete(head);
                         head = it;
                     }
                 }
-
             public:
                 Tick latency = 0;
-                DLinkedNode *get(Addr key)
+                DLinkedNode* get(Addr key)
                 {
                     if (keypathcache.count(key) > 0)
                     {
@@ -355,13 +354,9 @@ namespace gem5
                         return NULL;
                     }
                 }
-                bool Write2Cache(Addr newNodeaddr, uint8_t *databuf, uint8_t *retbuf, uint64_t ID);
-                int access(Addr key, uint8_t *value, bool isread);
-                int getCacheLinesize() {
-                    return Cachelinesize;
-                }
-                void Evict(uint8_t *retbuf)
-                {
+                bool Write2Cache(Addr newNodeaddr, uint8_t *databuf, uint8_t *retbuf);
+
+                void Evict(uint8_t* retbuf) {
                     DLinkedNode* oldtail = popTail();
                     memcpy(retbuf, oldtail->value, Cachelinesize);
                     memcpy(retbuf + Cachelinesize, (uint8_t*)(&oldtail->NodeAddr), 8);
@@ -369,9 +364,22 @@ namespace gem5
                     removeNode(oldtail);
                     free(oldtail);
                 }
+            public:
+                /**
+                 * @brief
+                 * @param key
+                 * @param value
+                 * @param isread 1是读，0是写
+                 * @return
+                */
+                int access(Addr key, uint8_t *value, bool isread);
+
+                int getCacheLinesize() {
+                    return Cachelinesize;
+                }
 
             private:
-                void addNode(DLinkedNode *node)
+                void addNode(DLinkedNode* node)
                 {
                     node->pre = head;
                     node->post = head->post;
@@ -381,37 +389,38 @@ namespace gem5
                 }
 
             private:
-                void removeNode(DLinkedNode *node)
+                void removeNode(DLinkedNode* node)
                 {
-                    DLinkedNode *pre = node->pre;
-                    DLinkedNode *post = node->post;
+                    DLinkedNode* pre = node->pre;
+                    DLinkedNode* post = node->post;
 
                     pre->post = post;
                     post->pre = pre;
                 }
 
             private:
-                void moveToHead(DLinkedNode *node)
+                void moveToHead(DLinkedNode* node)
                 {
                     removeNode(node);
                     addNode(node);
                 }
 
             private:
-                DLinkedNode *popTail()
+                DLinkedNode* popTail()
                 {
-                    DLinkedNode *res = tail->pre;
+                    DLinkedNode* res = tail->pre;
                     return res;
                 }
             };
-            class sDMCache
+            class sDMKeypathCache
             {
             public:
-                sDMmanager *sDMmanagerptr;
+                sDMmanager* sDMmanagerptr;
+                uint64_t  L1access = 0, L2access = 0,memoryaccess = 0;
 
             public:
                 Tick RemoteMemAccessLatency = 0;
-                sDMCache(sDMmanager *sDMmanagerptr, int L1CacheCapacity = 0, int L2CacheCapacity = 0, Tick L1CacheLatency = 0,
+                sDMKeypathCache(sDMmanager *sDMmanagerptr, int L1CacheCapacity = 0, int L2CacheCapacity = 0, Tick L1CacheLatency = 0,
                          Tick L2CacheLatency = 0, Tick RemoteMemAccessLatency = 0)
                 {
                     this->L1Cache = new sDMLRUCache(L1CacheCapacity, L1CacheLatency, 1, sDMmanagerptr,64);
@@ -419,7 +428,7 @@ namespace gem5
                     this->RemoteMemAccessLatency = RemoteMemAccessLatency;
                     this->sDMmanagerptr = sDMmanagerptr;
                 }
-                ~sDMCache();
+                ~sDMKeypathCache();
                 sDMLRUCache *L1Cache;
                 sDMLRUCache *L2Cache;
                 /**
@@ -431,9 +440,10 @@ namespace gem5
                  */
                 Tick CacheAccess(Addr Nodeaddr, uint8_t *databuf, bool isread);
             };
+            //热页面缓存，采用LFU替换策略
             class sDMLFUCache {
             private:
-                 struct CtrLinkNode {
+                struct CtrLinkNode {
                     uint8_t* CacheLineAddr;
                     //一个缓存行缓存半页数据。
                     Addr hpageaddr; // 对应的物理地址（半页对齐），用于被驱逐时加入到过滤器中
@@ -447,30 +457,31 @@ namespace gem5
                     CtrLinkNode* tail = NULL;
                     uint64_t ctr;   //该链对应的计数器
                 };
-                int count;
+                int count=0;
                 std::unordered_map<uint64_t, CtrLink*> FreqtoCtrLink;
                 std::unordered_map<Addr, CtrLinkNode*> KeytoCtrLinkNode;
                 std::unordered_map<Addr, uint64_t> KeytoFreq;
                 std::unordered_map<Addr, uint64_t> CtrBackup; // 内存上的计数器备份
                 std::list<uint64_t> LifeTimeCtr;  //在备份区淘汰存活时间最久的计数器备份
                 std::queue<CtrLink*> CtrLinks;  //计数器链表复用，减少重复申请空间
-                std::priority_queue<uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> minFreq;  // 快速找到最小的ctr。
+                std::set<uint64_t> minFreq;  // 快速找到最小的ctr。
             private:
-                int capacity;   // cache size(num of cache line)
-                int CacheID;	// L1Cache or L2Cache
-                int Threshold;
+                int capacity=0;   // cache size(num of cache line)
+                int CacheID=0;	// L1Cache or L2Cache
+                int Threshold=0;
                 int CtrBackupsize;  //计数器备份大小
                 uint64_t CacheLinesize = 0;
                 sDMLRUCache* CtrFilter;
 
             public:
-                sDMLFUCache(sDMmanager* sDMmanagerptr, int capacity, uint64_t CacheLinesize = 4096 >> 1) {
+                sDMLFUCache(sDMmanager* sDMmanagerptr, int capacity, uint64_t CacheLinesize = sDM_PAGE_SIZE >> 1) {
                     this->capacity = capacity;
                     this->CacheLinesize = CacheLinesize;
                     for (int i = 0; CtrLinks.size() < capacity + 1; i++) {
                         CtrLinks.push(CreateCtrlink(i));
                     }
-                    this->CtrFilter = new sDMLRUCache(128, 0, 1,sDMmanagerptr, sizeof(uint64_t));  //计数器大小sizeof(64)
+                    this->Threshold = 2;
+                    this->CtrFilter = new sDMLRUCache(128, 0, 1, sDMmanagerptr,sizeof(uint64_t));  //计数器大小sizeof(64)
                     this->CtrBackupsize = 128;  //和计数器过滤器保持一致
                 }
                 ~sDMLFUCache();
@@ -497,10 +508,10 @@ namespace gem5
                     //当且仅当一条ctr链没有任何数据的时候可以删除该链
                     if (FreqtoCtrLink[ctr]->head->Next != FreqtoCtrLink[ctr]->tail)
                     {
-                        printf("LFUCache(error):Not a empty CtrLink\n");
+                        printf("LFUCache(erro):Not a empty CtrLink\n");
                         return;
                     }
-                    // printf("recover CtrLink ctr %d\n", ctr);
+                    // printf("recover CtrLink ctr %ld\n", ctr);
                     CtrLinks.push(FreqtoCtrLink[ctr]);//回收CtrLink，用于复用
                     FreqtoCtrLink.erase(ctr);
                 }
@@ -519,6 +530,7 @@ namespace gem5
                     for (auto it = LifeTimeCtr.begin(); it != LifeTimeCtr.end(); it++) {
                         if ((*it) == Addr) {
                             LifeTimeCtr.erase(it);
+                            return;
                         }
                     }
                 }
@@ -598,7 +610,7 @@ namespace gem5
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时,根据pid找到对应的sdm space表,查找此表对应到相应的space id vaddr <==> (page_num,space id)
             std::unordered_map<uint64_t, std::map<Addr, std::pair<size_t, sdmID>>> sdm_paddr2id;
-            sDMCache *KeypathCache; // L1 and L2
+            sDMKeypathCache *KeypathCache; // L1 and L2
             sDMLFUCache *HotPageCache; //HotPageCache
             sDMAddrCache *addrCache; // 针对find函数的cache
             sDMstat *lstat;         // 本地内存统计量

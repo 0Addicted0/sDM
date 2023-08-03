@@ -1,0 +1,97 @@
+/home/ys/Desktop/sDM
+GEM5_HOME is /home/ys/Desktop/sDM
+g++ -o aes.o aes.c sdmmalloc.cpp -I/home/ys/Desktop/sDM/include  -L/home/ys/Desktop/sDM/util/m5/build/x86/out -lm5  
+g++ -o malloctest.o malloctest.cpp sdmmalloc.cpp -I/home/ys/Desktop/sDM/include  -L/home/ys/Desktop/sDM/util/m5/build/x86/out -lm5  
+g++ -o gen.o gen.cpp
+g++ -o graph.o graph.cpp sdmmalloc.cpp -I/home/ys/Desktop/sDM/include  -L/home/ys/Desktop/sDM/util/m5/build/x86/out -lm5  
+scons: Reading SConscript files ...
+Mkdir("/home/ys/Desktop/sDM/build/X86/gem5.build")
+Checking for linker -Wl,--as-needed support... (cached) yes
+Checking for compiler -Wno-free-nonheap-object support... (cached) yes
+Checking for compiler -gz support... (cached) yes
+Checking for linker -gz support... (cached) yes
+Info: Using Python config: python3-config
+Checking for C header file Python.h... (cached) yes
+Checking Python version... (cached) 3.10.6
+Checking for accept(0,0,0) in C++ library None... (cached) yes
+Checking for zlibVersion() in C++ library z... (cached) yes
+Checking for C library tcmalloc... (cached) yes
+Building in /home/ys/Desktop/sDM/build/X86
+Using saved variables file(s) /home/ys/Desktop/sDM/build/X86/gem5.build/variables
+Checking for pkg-config package protobuf... (cached) yes
+Checking for GOOGLE_PROTOBUF_VERIFY_VERSION in C++ library protobuf... (cached) yes
+Checking for C header file linux/kvm.h... (cached) yes
+Checking for timer_create(CLOCK_MONOTONIC, NULL, NULL) in C library None... (cached) yes
+Checking for member exclude_host in struct perf_event_attr...(cached) yes
+Checking for backtrace_symbols_fd((void *)1, 0, 0) in C library None... (cached) yes
+Checking for C header file linux/if_tun.h... (cached) yes
+Checking for C header file fenv.h... (cached) yes
+Checking for C header file png.h... (cached) yes
+Checking for clock_nanosleep(0,0,NULL,NULL) in C library None... (cached) yes
+Checking for C header file valgrind/valgrind.h... (cached) no
+Checking for pkg-config package hdf5-serial... (cached) yes
+Checking for H5Fcreate("", 0, 0, 0) in C library hdf5... (cached) yes
+Checking for H5::H5File("", 0) in C++ library hdf5_cpp... (cached) yes
+Checking for shm_open("/test", 0, 0) in C library None... (cached) yes
+Checking size of struct kvm_xsave ... (cached) yes
+Checking whether __i386__ is declared... (cached) no
+Checking whether __x86_64__ is declared... (cached) yes
+Checking for compiler -Wno-self-assign-overloaded support... (cached) yes
+Checking for compiler -Wno-free-nonheap-object support... (cached) yes
+scons: done reading SConscript files.
+scons: Building targets ...
+ [VER TAGS]  -> X86/sim/tags.cc
+ [     CXX] X86/mem/sDM/sDM.cpp -> .o
+ [     CXX] X86/base/date.cc -> .o
+ [    LINK]  -> X86/gem5.opt
+scons: done building targets.
+Global frequency set at 1000000000000 ticks per second
+AbstractMemory [0:0x20000000] constructed
+AbstractMemory [0x10000000000:0x10020000000] constructed
+SEWorkload constructed
+system[system] construceted
+in mem_pool.cc pool(0):[0x0->0x20000000]
+in mem_pool.cc pool(1):[0x10000000000->0x10020000000]
+
+███████╗██████╗ ███╗   ███╗███╗   ███╗
+██╔════╝██╔══██╗████╗ ████║████╗ ████║
+███████╗██║  ██║██╔████╔██║██╔████╔██║
+╚════██║██║  ██║██║╚██╔╝██║██║╚██╔╝██║
+███████║██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║
+╚══════╝╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝
+
++-----------------------------------+
+|     sDMmanager configuration      |
++-----------------------------------+
+|dram_cache_size     (Bytes)= 131072|
+|onchip_cache_size   (Bytes)=    256|
+|addr_cache_size     (Bytes)=    256|
+|hash_latency        (Cycle)=     20|
+|encrypt_latency     (Cycle)=     20|
+|onchip_cache_latency(Cycle)=     16|
+|local_Mem_latency   (Cycle)=    150|
+|remote_Mem_latency  (Cycle)=    600|
++-----------------------------------+
+Address Cache init!
+process[/home/ys/Desktop/sDM/tests/malloctest/aes.o] construct
++-------------------------------------+
+|         Memory configuration        |
++-------------------------------------+
+|Range(0)               [0:0x20000000]|
+|    static_frontendLatency:    300000|
+|    static_backendLatency:      10000|
++-------------------------------------+
+|Range(1)[0x10000000000:0x10020000000]|
+|    static_frontendLatency:     75000|
+|    static_backendLatency:      10000|
++-------------------------------------+
+gem5 Simulator System.  https://www.gem5.org
+gem5 is copyrighted software; use the --copyright option for details.
+
+gem5 version 22.1.0.0
+gem5 compiled Aug  3 2023 17:28:48
+gem5 started Aug  3 2023 17:30:05
+gem5 executing on ys-virtual-machine, pid 25652
+command line: build/X86/gem5.opt configs/example/se.py --caches --l1d_size=128B --l1i_size=128B --mem-type=DDR3_1600_8x8 --mem-size=512MB '--pool_ids=0,1;' --sDMenable=true --fast_mode=0 --hash_lat=20 --enc_lat=20 --onchip_cache_size=4 --onchip_cache_lat=16 --dram_cache_size=2048 --lmem_lat=150 --rmem_lat=600 --cpu-type=TimingSimpleCPU --cmd=/home/ys/Desktop/sDM/tests/malloctest/aes.o
+
+**** REAL SIMULATION ****
