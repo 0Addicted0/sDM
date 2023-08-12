@@ -385,8 +385,7 @@ namespace gem5
                     {
                         // evict
                         // pop the tail
-                        Evict(retbuf);
-                        --count;
+                        Evict(retbuf);                        
                         return true;
                     }
                     return false;
@@ -454,6 +453,7 @@ namespace gem5
 
                     pre->post = post;
                     post->pre = pre;
+                    --count;
                 }
 
             private:
@@ -580,7 +580,6 @@ namespace gem5
                         printf("LFUCache(erro):Not a empty CtrLink\n");
                         return;
                     }
-                    printf("recover CtrLink ctr %ld\n", ctr);
                     CtrLinks.push(FreqtoCtrLink[ctr]);//回收CtrLink，用于复用
                     FreqtoCtrLink.erase(ctr);
                 }

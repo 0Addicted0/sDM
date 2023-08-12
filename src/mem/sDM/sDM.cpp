@@ -289,7 +289,7 @@ namespace gem5
             printf("+-----------------------------------+\n");
             sdm_space_cnt = 0;
             sdm_table.assign(1, sdm_space());
-            isHotPageenable = false;
+            isHotPageenable = true;
             KeypathCache = new sDMKeypathCache(this, onchip_cache_size, dram_cache_size,
                                                onchip_cache_latency, localMemAccessLatency, remoteMemAccessLatency);
             HotPageCache = new sDMLFUCache(this, onchip_cache_size, sDM_PAGE_SIZE >> 1, 128, 2, 128);
@@ -1029,7 +1029,7 @@ namespace gem5
             // 读取所在半页的内存数据
             if (isHotPageenable)
             {
-                if (!HotPageCache->AccessHotPageCache(pageAddr, hpg_data, true))
+                if (!HotPageCache->CacheAccess(pageAddr, hpg_data, true))
                 {
                     read4Mem(sDM_PAGE_SIZE >> 1, hpg_data, pageAddr);
                 }
@@ -1270,7 +1270,7 @@ namespace gem5
 
                 if (isHotPageenable)
                 {
-                    HotPageCache->AccessHotPageCache(hpaddr, hpg_data, 0);
+                    HotPageCache->CacheAccess(hpaddr, hpg_data, 0);
                 }
             }
             else
@@ -1599,134 +1599,123 @@ namespace gem5
          * @param isread 读数据还是写数据
          * @return 返回true表示命中
          */
-        bool sDMmanager::sDMLFUCache::CacheAccess(Addr key, uint8_t *value, bool isread)
-        {
-            uint8_t *retbuf = (uint8_t *)malloc(sizeof(uint8_t) * (2048 + 8 + 8));
-            bool ret = false;
-            bool hasevictHotPage = false;
+        bool sDMmanager::sDMLFUCache::CacheAccess(Addr key, uint8_t* value, bool isread) {
+			uint8_t* retbuf = (uint8_t*)malloc(sizeof(uint8_t) * (2048 + 8 + 8));
+			bool ret = false;
+			bool hasevictHotPage = false;
+            sDMmanagerptr->lstat->HotPageCacheaccess++;
             if (KeytoCtrLinkNode.count(key) > 0)
             {
+                sDMmanagerptr->lstat->HotPageCachehit++;
+                printf("hit key 0x%lx\n", key);
                 // 内存缓存 hit
                 if (isread)
                 {
-                    memcpy(value, KeytoCtrLinkNode[key]->CacheLineAddr, CacheLinesize);
-                }
-                else
-                {
-                    memcpy(KeytoCtrLinkNode[key]->CacheLineAddr, value, CacheLinesize);
-                }
-                uint64_t ctr = KeytoFreq[key];
-                CtrLinkNode *Node = KeytoCtrLinkNode[key];
-                Insert2Ctrlink(key, Node, ctr + 1, retbuf, 1); // 从原来的链表中摘除，插入到ctr+1的那条链中
+					memcpy(value, KeytoCtrLinkNode[key]->CacheLineAddr, CacheLinesize);
+				}
+				else {
+					memcpy(KeytoCtrLinkNode[key]->CacheLineAddr, value, CacheLinesize);
+				}
+				uint64_t ctr = KeytoFreq[key];
+				CtrLinkNode* Node = KeytoCtrLinkNode[key];
+				Insert2Ctrlink(key, Node, ctr + 1, retbuf, 1);  //从原来的链表中摘除，插入到ctr+1的那条链中
 
-                ret = true;
-            }
-            else
-            {
-                // miss
-                ret = false;
-                uint64_t curHpagectr = 0;
-                uint8_t curHpagectrCL[CL_SIZE];
-                if (CtrFilter->access(key, (uint8_t *)(curHpagectrCL), 1))
-                {
-                    // 不在缓存中，但是在过滤器中，判断是否为热页面
-                    memcpy(&curHpagectr, curHpagectrCL, sizeof(uint64_t));
-                    curHpagectr++;
+				ret = true;
+			}
+			else {
+				//miss
+				ret = false;
+                printf("miss key 0x%lx\n", key);
+				uint64_t curHpagectr = 0;
+				if (CtrFilter->access(key, (uint8_t*)(&curHpagectr), 1)) {
+					// 不在缓存中，但是在过滤器中，判断是否为热页面
+					curHpagectr++;
                     if (curHpagectr > Threshold)
                     {
-                        // 识别为热页面，加入缓存
-                        CtrLinkNode *newCtrLinkNode = (CtrLinkNode *)malloc(sizeof(CtrLinkNode));
-                        newCtrLinkNode->CacheLineAddr = (uint8_t *)malloc(sizeof(uint8_t) * CacheLinesize);
-                        newCtrLinkNode->hpageaddr = key;
-                        // read from remote mem
-                        sDMmanagerptr->read4Mem(CacheLinesize, (uint8_t *)newCtrLinkNode->CacheLineAddr, key);
-                        if (isread)
-                        {
-                            memcpy(value, newCtrLinkNode->CacheLineAddr, CacheLinesize);
-                        }
-                        else
-                        {
-                            memcpy(newCtrLinkNode->CacheLineAddr, value, CacheLinesize);
-                        }
-                        // 新插入的计数器先初始化为0
-                        hasevictHotPage = Insert2Ctrlink(key, newCtrLinkNode, 0, retbuf, 0); // 一定不在链中
-                        uint8_t *CtrFilterrebuf = (uint8_t *)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + 8));
-                        // 从计数器过滤器中逐出
-                        CtrFilter->Evict(CtrFilterrebuf);
-                        free(CtrFilterrebuf);
-                        ret = true;
-                    }
-                    else
-                    {
-                        // 写入增加后的计数器
-                        memcpy(curHpagectrCL, &curHpagectr, sizeof(uint64_t));
-                        CtrFilter->access(key, (uint8_t *)(&curHpagectr), 0);
-                    }
-                }
-                else
-                {
-                    // 计数器不在计数器过滤器中，加入过滤器，ctr初始化为1
-                    uint64_t InitCtr = 1;
-                    uint8_t InitCtrCL[CL_SIZE];
+                        //识别为热页面，加入缓存
 
-                    uint8_t *CtrFilterretbuf = (uint8_t *)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + 8));
-                    if (CtrBackup.count(key) > 0)
-                    {
-                        // 先查看计数器备份
-                        InitCtr = CtrBackup[key];
-                        CtrBackup.erase(key); // 剔除备份，加入过滤器
-                        deletebackup(key);
+						CtrLinkNode* newCtrLinkNode = (CtrLinkNode*)malloc(sizeof(CtrLinkNode));
+						newCtrLinkNode->CacheLineAddr = (uint8_t*)malloc(sizeof(uint8_t) * CacheLinesize);
+						newCtrLinkNode->hpageaddr = key;
+						// read from remote mem
+						sDMmanagerptr->read4Mem(CacheLinesize, newCtrLinkNode->CacheLineAddr, key);
+						if (isread)
+						{
+							memcpy(value, newCtrLinkNode->CacheLineAddr, CacheLinesize);
+						}
+						else {
+							memcpy(newCtrLinkNode->CacheLineAddr, value, CacheLinesize);
+						}
+						// 新插入的计数器先初始化为0
+						hasevictHotPage = Insert2Ctrlink(key, newCtrLinkNode, 0, retbuf, 0);  //一定不在链中
+						uint8_t* CtrFilterrebuf = (uint8_t*)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + 8));
+						//从计数器过滤器中逐出
+						CtrFilter->Evict(CtrFilterrebuf);
+						free(CtrFilterrebuf);
+						ret = true;
                     }
-                    memcpy(InitCtrCL, &InitCtr, sizeof(uint64_t));
-                    // 加入过滤器
-                    if (CtrFilter->Write2Cache(key, (uint8_t *)(InitCtrCL), (uint8_t *)(CtrFilterretbuf)))
-                    {
-                        // 过滤器逐出，加入备份
-                        uint64_t oldctr = *(Addr *)(CtrFilterretbuf);
-                        CtrBackup.insert(std::pair<Addr, uint64_t>(key, oldctr));
-                        LifeTimeCtr.push_back(key);
-                        if (CtrBackup.size() > CtrBackupsize)
-                        {
-                            Addr oldkey = LifeTimeCtr.front();
+                    else {
+						//写入增加后的计数器
+						CtrFilter->access(key, (uint8_t*)(&curHpagectr), 0);
+					}
+				}
+				else {
+					// 计数器不在计数器过滤器中，加入过滤器，ctr初始化为1
+					uint64_t InitCtr = 1;
+                    
+					uint8_t* CtrFilterretbuf = (uint8_t*)malloc(sizeof(uint8_t) * (CtrFilter->getCacheLinesize() + (uint64_t)8));
+					if (CtrBackup.count(key) > 0) {
+						//先查看计数器备份
+						InitCtr = CtrBackup[key];
+						CtrBackup.erase(key);   // 剔除备份，加入过滤器
+						deletebackup(key);
+					}
+					//加入过滤器
+					if (CtrFilter->Write2Cache(key, (uint8_t*)(&InitCtr), (uint8_t*)(CtrFilterretbuf))) {
+						//过滤器逐出，加入备份
+						uint64_t oldctr = *(Addr*)(CtrFilterretbuf);
+                        uint64_t Oldkey = *(Addr *)(CtrFilterretbuf + sizeof(uint64_t));
+                        CtrBackup.insert(std::pair<Addr, uint64_t>(Oldkey, oldctr));
+                        LifeTimeCtr.push_back(Oldkey);
+						if (CtrBackup.size() > CtrBackupsize) {
+                            
+                            Addr Invalidkey = LifeTimeCtr.front();
                             LifeTimeCtr.erase(LifeTimeCtr.begin());
-                            CtrBackup.erase(oldkey);
-                        }
-                    }
-                    free(CtrFilterretbuf);
-                }
+							CtrBackup.erase(Invalidkey);
+						}
 
-                if (hasevictHotPage)
-                {
-                    // 新加入热页面后，热页面缓存溢出，需要把替换出的热页面对应的计数器加入过滤器中
+					}
+					free(CtrFilterretbuf);
+				}
 
+				if (hasevictHotPage) {
+					// 新加入热页面后，热页面缓存溢出，需要把替换出的热页面对应的计数器加入过滤器中
                     Addr hPageaddr = *(uint64_t *)(retbuf + 2048);
-                    uint64_t ctr = *(uint64_t *)(retbuf + 2048 + 8);
-                    ctr = Threshold / 2;
-                    uint8_t *ctrfilterretbuf = (uint8_t *)malloc(sizeof(char) * 64);
-                    uint8_t *databuf = (uint8_t *)malloc(sizeof(char) * CtrFilter->getCacheLinesize());
-                    memcpy(databuf, (uint8_t *)(&ctr), sizeof(uint64_t));
-                    bool ctrfilterret = CtrFilter->Write2Cache(hPageaddr, databuf, ctrfilterretbuf);
-                    if (ctrfilterret)
-                    {
-                        // 写入内存计数器备份区
+                    uint64_t ctr = *(uint64_t*)(retbuf + 2048 + 8);
+					ctr = Threshold / 2;
+					uint8_t* ctrfilterretbuf = (uint8_t*)malloc(sizeof(char) * 64);
+					uint8_t* databuf = (uint8_t*)malloc(sizeof(char) * CtrFilter->getCacheLinesize());
+					memcpy(databuf, (uint8_t*)(&ctr), sizeof(uint64_t));
+					bool ctrfilterret = CtrFilter->Write2Cache(hPageaddr, databuf, ctrfilterretbuf);
+					if (ctrfilterret) {
+						// 写入内存计数器备份区
                         CtrBackup.insert(std::pair<Addr, uint64_t>(hPageaddr, ctr));
                         LifeTimeCtr.push_back(hPageaddr);
-                        if (CtrBackup.size() > CtrBackupsize)
-                        {
-                            Addr oldkey = LifeTimeCtr.front();
-                            LifeTimeCtr.erase(LifeTimeCtr.begin());
-                            CtrBackup.erase(oldkey);
-                        }
-                    }
-                    // 写入远端内存
-                    sDMmanagerptr->write2Mem(sDM_PAGE_SIZE >> 1, retbuf, hPageaddr);
-                    free(databuf);
-                    free(ctrfilterretbuf);
-                }
-            }
-            free(retbuf);
-            return ret;
-        }
+						if (CtrBackup.size() > CtrBackupsize) {
+							Addr oldkey = LifeTimeCtr.front();
+							LifeTimeCtr.erase(LifeTimeCtr.begin());
+							CtrBackup.erase(oldkey);
+						}
+					}
+					// 写入远端内存
+					sDMmanagerptr->write2Mem(sDM_PAGE_SIZE >> 1, retbuf, hPageaddr);
+					free(databuf);
+					free(ctrfilterretbuf);
+				}
+			}
+			free(retbuf);
+			return ret;
+		}
         /**
          * @brief 访问内存大小小于半页
          * @param addr
@@ -1740,7 +1729,7 @@ namespace gem5
             Addr hPageaddr = (addr & PAGE_ALIGN_MASK) | (addr & (sDM_PAGE_SIZE >> 1));
             uint8_t *hPagedata = (uint8_t *)malloc(sizeof(uint8_t) * (sDM_PAGE_SIZE >> 1));
 
-            if (!AccessHotPageCache(hPageaddr, hPagedata, true))
+            if (!CacheAccess(hPageaddr, hPagedata, true))
             {
                 // 从远端读
                 if (isread)
@@ -1762,7 +1751,7 @@ namespace gem5
                 else
                 {
                     memcpy(hPagedata + (addr - hPageaddr), value, bytesize);
-                    AccessHotPageCache(hPageaddr, hPagedata, isread); // 新数据写进缓存
+                    CacheAccess(hPageaddr, hPagedata, isread); // 新数据写进缓存
                 }
             }
             free(hPagedata);

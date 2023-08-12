@@ -23,7 +23,7 @@ test_dir="$(pwd)/tests/malloctest"
 # tests/malloctest/gen.o | \
 build/X86/gem5.opt \
     configs/example/se.py \
-    --caches --l1d_size=128B --l1i_size=128B \
+    --caches --l1d_size=4kB --l1i_size=4kB \
     --mem-type=DDR3_1600_8x8 --mem-size=512MB --pool_ids='0,1;' \
     --sDMenable=true --fast_mode=0 --hash_lat=20 --enc_lat=20 --onchip_cache_size=4 --onchip_cache_lat=16 --dram_cache_size=2048 --lmem_lat=150 --rmem_lat=600 \
     --cpu-type=TimingSimpleCPU \

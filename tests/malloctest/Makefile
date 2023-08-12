@@ -12,6 +12,7 @@ LDFLAGS=-L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out -lm5
 
 all:
 	$(CXX) -o aes.o aes.c sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
+	$(CXX) -c sdmmalloc.cpp $(CFLAGS) $(LDFLAGS)
 # $(CXX) -o demo3.o demo3.cpp sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
 	$(CXX) -o malloctest.o malloctest.cpp sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
 # $(CXX) -o demo2.o demo2.cpp sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 
