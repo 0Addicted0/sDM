@@ -1,0 +1,4 @@
+/build/
+/tests/db/
+/tests/*.o
+/tests/*.out

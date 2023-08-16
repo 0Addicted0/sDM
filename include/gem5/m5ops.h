@@ -75,6 +75,10 @@ bool m5_sdm_poster(uint64_t vaddr, size_t size);
  * @brief 释放sDM安全空间
 */
 bool m5_sdm_puller(uint64_t vaddr);
+/**
+ * @brief 检查是否属于安全空间
+*/
+bool m5_sdm_finder(uint64_t vaddr);
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
  * the workload to know what information to look for to interpret an event,

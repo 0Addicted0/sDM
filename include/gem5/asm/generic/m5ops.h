@@ -110,6 +110,8 @@
     M5OP(m5_workload, M5OP_WORKLOAD)                            \
     M5OP(m5_sdm_poster, M5OP_RESERVED1)                            \
     M5OP(m5_sdm_puller, M5OP_RESERVED2)                            \
+    M5OP(m5_sdm_finder, M5OP_RESERVED3)                            \
+
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b
 #define M5OP_MERGE_TOKENS(a, b) M5OP_MERGE_TOKENS_I(a, b)

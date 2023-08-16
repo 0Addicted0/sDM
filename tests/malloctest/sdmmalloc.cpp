@@ -13,9 +13,13 @@ void *sdmmalloc(size_t len)
     for (int i = 0; i < len; i += sDM_PAGE_SIZE)// raise mapping
         ((char *)addr)[i] = 0;
     // 用于测试物理地址（gem5的虚拟地址）是否可直接写入
-    if (!m5_sdm_poster((long int)addr, len)) // m5ops解析无法解析int32的参数
+    if (!m5_sdm_poster((uint64_t)addr, len)) // m5ops解析无法解析int32的参数
     {
         printf("Apply for secure space failed\n");
+    }
+    else 
+    {
+        printf("Apply for secure space[0x%p] success\n", addr);
     }
     return addr;
 }

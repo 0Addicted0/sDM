@@ -29,6 +29,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "gem5/sdmmalloc.h"
 
 typedef int		 cmp_t(const void *, const void *);
 
@@ -184,7 +185,7 @@ int compare (const void *a, const void *b)
 
 int main()
 {
-	int *arr = (int *) malloc(ARRAY_SIZE * sizeof(int));
+	int *arr = (int *) sdmmalloc(ARRAY_SIZE * sizeof(int));
 	int val = 1;
 	for (size_t i = 0; i < ARRAY_SIZE; i++) {
 		arr[i] = val;
@@ -192,5 +193,6 @@ int main()
 	}
 	qsort(arr, ARRAY_SIZE, sizeof(int), compare);
 	printf("%u\n", arr[ARRAY_SIZE-1]);
+	sdmfree(arr);
 	return 0;
 }

@@ -1,0 +1,13 @@
+*.a
+*.o
+aes
+gen
+graph
+malloctest
+bigint
+dhrystone
+primes
+qsort
+sha512
+norx
+miniz

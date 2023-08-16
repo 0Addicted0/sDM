@@ -644,5 +644,15 @@ namespace gem5
             uint64_t pid = process->pid();
             return process->sDMmanager && process->sDMmanager->sDMspace_free(pid, vaddr);
         }
+        /**
+         * @brief 返回检查是否属于安全空间
+        */
+       bool
+       sdm_finder(ThreadContext *tc, Addr vaddr)
+       {
+            Process *process = tc->getProcessPtr();
+            uint64_t pid = process->pid();
+            return process->sDMmanager && (process->sDMmanager->isContained(pid, vaddr) != 0);
+       }
     } // namespace pseudo_inst
 } // namespace gem5

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
+#include "gem5/sdmmalloc.h"
 
 #define test(p) (primes[p >> 6] & 1 << (p & 0x3f))
 #define set(p) (primes[p >> 6] |= 1 << (p & 0x3f))
@@ -9,9 +10,11 @@
 
 int main()
 {
-	int limit = 33333333;
-	size_t primes_size = ((limit >> 6) + 1) * sizeof(uint64_t);
-	uint64_t *primes = (uint64_t*)malloc(primes_size);
+	printf("primes start...\n");
+    int limit = 33333333;
+    size_t primes_size = ((limit >> 6) + 1) * sizeof(uint64_t);
+    printf("size=%ldkB\n", primes_size / 1024);
+	uint64_t *primes = (uint64_t*)sdmmalloc(primes_size);
 	int64_t p = 2, sqrt_limit = (int64_t)sqrt(limit);
 	while (p <= limit >> 1) {
 		for (int64_t n = 2 * p; n <= limit; n += p) if (!test(n)) set(n);
@@ -23,4 +26,5 @@ int main()
 			return 0;
 		}
 	}
+	sdmfree(primes);
 };

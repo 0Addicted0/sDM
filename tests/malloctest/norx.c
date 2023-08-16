@@ -19,6 +19,7 @@
 #include <string.h>
 #include <strings.h>
 #include <assert.h>
+#include "gem5/sdmmalloc.h"
 
 typedef struct
 {
@@ -77,7 +78,7 @@ void cf_blockwise_accumulate_final(uint8_t *partial, size_t *npartial, size_t nb
                                    cf_blockwise_in_fn process_final,
                                    void *ctx)
 {
-  const uint8_t *bufin = inp;
+  const uint8_t *bufin = (const uint8_t *)inp;
   assert(partial && *npartial < nblock);
   assert(inp || !nbytes);
   assert(process && ctx);
@@ -252,7 +253,7 @@ static void input_block_final(void *vctx, const uint8_t *data)
 static void input_block(void *vctx, const uint8_t *data)
 {
   /* Process block, then prepare for the next one. */
-  blockctx *bctx = vctx;
+  blockctx *bctx = (blockctx *)vctx;
   input_block_final(vctx, data);
   switch_domain(bctx->ctx, bctx->type);
 }
@@ -474,9 +475,9 @@ int main()
   static const size_t DATA_SIZE = 32 * 1024 * 1024;
   uint8_t tag[16];
   
-  uint8_t *pt1 = malloc(DATA_SIZE);
-  uint8_t *ct = malloc(DATA_SIZE);
-  uint8_t *pt2 = malloc(DATA_SIZE);
+  uint8_t *pt1 = sdmmalloc(DATA_SIZE);
+  uint8_t *ct = sdmmalloc(DATA_SIZE);
+  uint8_t *pt2 = sdmmalloc(DATA_SIZE);
 
   /* create test pattern */
   char c = 0x01;
@@ -493,10 +494,10 @@ int main()
   cf_norx32_decrypt(key, nonce, NULL, 0, ct, DATA_SIZE, NULL, 0, tag, pt2);
 
   /* compare */
-  printf("%d\n", memcmp(pt1, pt2, DATA_SIZE));
+  printf("%s\n", memcmp(pt1, pt2, DATA_SIZE)==0?"succeed":"fail");
 
-  free(pt1);
-  free(ct);
-  free(pt2);
+  sdmfree(pt1);
+  sdmfree(ct);
+  sdmfree(pt2);
   return 0;
 }

@@ -1607,7 +1607,7 @@ namespace gem5
             if (KeytoCtrLinkNode.count(key) > 0)
             {
                 sDMmanagerptr->lstat->HotPageCachehit++;
-                printf("hit key 0x%lx\n", key);
+                // printf("hit key 0x%lx\n", key);
                 // 内存缓存 hit
                 if (isread)
                 {
@@ -1625,7 +1625,7 @@ namespace gem5
 			else {
 				//miss
 				ret = false;
-                printf("miss key 0x%lx\n", key);
+                // printf("miss key 0x%lx\n", key);
 				uint64_t curHpagectr = 0;
 				if (CtrFilter->access(key, (uint8_t*)(&curHpagectr), 1)) {
 					// 不在缓存中，但是在过滤器中，判断是否为热页面
