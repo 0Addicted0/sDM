@@ -46,22 +46,22 @@ mandir = $(datarootdir)/man
 
 ########################################################################
 
-IHDRS	= lmdb.h
+IHDRS	= lmdb.h sdm.h
 ILIBS	= liblmdb.a # liblmdb$(SOEXT) # cancel to generate .so file
 IPROGS	= mdb_stat mdb_copy mdb_dump mdb_load
 IDOCS	= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
-PROGS	= $(IPROGS) mtest mtest2 mtest3 mtest4 mtest5
+# PROGS	= $(IPROGS) mtest mtest2 mtest3 mtest4 mtest5
 all:	$(ILIBS) $(PROGS)
 
-install: $(ILIBS) $(IHDRS) #$(IPROGS)
+install: $(ILIBS) $(IHDRS) $(IPROGS)
 # mkdir -p $(DESTDIR)$(bindir)
 	mkdir -p $(DESTDIR)$(libdir)
 	mkdir -p $(DESTDIR)$(includedir)
-	mkdir -p $(DESTDIR)$(mandir)/man1
+# mkdir -p $(DESTDIR)$(mandir)/man1
 # for f in $(IPROGS); do cp $$f $(DESTDIR)$(bindir); done
 	for f in $(ILIBS); do cp $$f $(DESTDIR)$(libdir); done
 	for f in $(IHDRS); do cp $$f $(DESTDIR)$(includedir); done
-	for f in $(IDOCS); do cp $$f $(DESTDIR)$(mandir)/man1; done
+# for f in $(IDOCS); do cp $$f $(DESTDIR)$(mandir)/man1; done
 
 clean:
 	rm -rf $(PROGS) *.[ao] *.[ls]o *~ testdb
@@ -74,38 +74,37 @@ liblmdb.a:	mdb.o midl.o
 	$(AR) rs $@ mdb.o midl.o
 
 liblmdb$(SOEXT):	mdb.lo midl.lo
-#	$(CC) $(LDFLAGS) -pthread -shared -Wl,-Bsymbolic -o $@ mdb.o midl.o $(SOLIBS)
 	$(CC) $(LDFLAGS) -pthread -shared -o $@ mdb.lo midl.lo $(SOLIBS)
 
 mdb_stat: mdb_stat.o liblmdb.a
 mdb_copy: mdb_copy.o liblmdb.a
 mdb_dump: mdb_dump.o liblmdb.a
 mdb_load: mdb_load.o liblmdb.a
-mtest:    mtest.o    liblmdb.a
-mtest2:	mtest2.o liblmdb.a
-mtest3:	mtest3.o liblmdb.a
-mtest4:	mtest4.o liblmdb.a
-mtest5:	mtest5.o liblmdb.a
-mtest6:	mtest6.o liblmdb.a
+# mtest:    mtest.o    liblmdb.a
+# mtest2:	mtest2.o liblmdb.a
+# mtest3:	mtest3.o liblmdb.a
+# mtest4:	mtest4.o liblmdb.a
+# mtest5:	mtest5.o liblmdb.a
+# mtest6:	mtest6.o liblmdb.a
 
 ### for gem5
-mdb.o: mdb.c lmdb.h midl.h
+mdb.o: mdb.c sdm.h lmdb.h midl.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDLIBS) $(LDFLAGS) -D _sDM_=1 -c mdb.c
 
-midl.o: midl.c midl.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDLIBS) -c midl.c
+midl.o: midl.c sdm.h midl.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDLIBS) -D _sDM_=1 -c midl.c
 
-mdb.lo: mdb.c lmdb.h midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c mdb.c -o $@
+mdb.lo: mdb.c sdm.h lmdb.h midl.h
+	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -D _sDM_=1 -c mdb.c -o $@
 
-midl.lo: midl.c midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c midl.c -o $@
+midl.lo: midl.c sdm.h midl.h
+	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -D _sDM_=1 -c midl.c -o $@
 
 %:	%.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 
-%.o: %.c lmdb.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
+%.o: %.c sdm.h lmdb.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -D _sDM_=1 -c $<
 
 COV_FLAGS=-fprofile-arcs -ftest-coverage
 COV_OBJS=xmdb.o xmidl.o
@@ -120,8 +119,8 @@ coverage: xmtest
 xmtest:	mtest.o xmdb.o xmidl.o
 	gcc -o xmtest mtest.o xmdb.o xmidl.o -pthread $(COV_FLAGS)
 
-xmdb.o: mdb.c lmdb.h midl.h
+xmdb.o: mdb.c sdm.h lmdb.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c mdb.c -o $@
 
-xmidl.o: midl.c midl.h
+xmidl.o: midl.c sdm.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c midl.c -o $@

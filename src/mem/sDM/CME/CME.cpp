@@ -20,12 +20,31 @@ namespace gem5
     {
         int FAST_MODE = 0;
         uint64_t HMAC_COUNTER;
+        bool ischr(char ch)
+        {
+            if( ch <= 'z' && ch >= 'a' )
+                return true;
+            if ( ch <= 'Z' && ch >= 'A' )
+                return true;
+            if (ch <= '9' && ch >= '0')
+                return true;
+            return false;
+        }
         void dump(char *title, uint8_t *txt, int len)
         {
             printf("%s\n\t", title);
             for (int i = 0; i < len; i++)
             {
                 printf("%02x ", txt[i]);
+                if ((i + 1) % 8 == 0)
+                    printf("\t");
+                if ((i + 1) % 16 == 0)
+                    printf("\n\t");
+            }
+            printf("\n\t");
+            for (int i = 0; i < len; i++)
+            {
+                printf("%c", ischr(txt[i])?txt[i]:'.');
                 if ((i + 1) % 8 == 0)
                     printf("\t");
                 if ((i + 1) % 16 == 0)
@@ -186,7 +205,7 @@ namespace gem5
          */
         void sDM_HMAC(uint8_t *input, int inputLen, uint8_t *hamc_key, sDM::Addr paddr, uint8_t *counter, int counterLen, uint8_t *hmac, int hmacLen)
         {
-            // HMAC_COUNTER++;
+            HMAC_COUNTER++;
             memset(hmac, 0, hmacLen);
             if(FAST_MODE)
                 return;
@@ -219,7 +238,6 @@ namespace gem5
             sm3::SM3_256(V, SM3_SIZE + SM3_SIZE, p1);
             //  cut
             memcpy(hmac, p1, hmacLen);
-            HMAC_COUNTER++;
 #ifdef HMAC_debug
             if (inputLen == 64)
                 dump("HMAC", hmac, hmacLen);

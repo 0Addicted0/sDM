@@ -6,10 +6,13 @@ $(info   GEM5_HOME is $(GEM5_HOME))
 CXX=g++
 C=gcc
 AR	= ar
-OPT = -O3 -fpermissive -Wregister
+OPT = -O3 
 W = 
-CFLAGS = $(W) $(OPT) -I$(GEM5_HOME)/include 
-LDFLAGS = -L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out -lm5 --static
+CFLAGS = $(W) $(OPT) -DREG=register -I$(GEM5_HOME)/include
+CXXFLAGS = $(W) $(OPT) -fpermissive -Wregister -I$(GEM5_HOME)/include
+LDFLAGS = -L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out -lm5
+LDLIBS = -L. -lsdm
+FLAGS = --static
 prefix = $(GEM5_HOME)
 
 ILIBS = libsdm.a
@@ -21,35 +24,35 @@ sdmmalloc.h = $(GEM5_HOME)/include/gem5/sdmmalloc.h
 all: $(ILIBS) $(PROGS)
 
 install: $(ILIBS)
-# mkdir -p $(libdir)
+	mkdir -p $(libdir)
 	for f in $(ILIBS); do cp $$f $(libdir); done
 
 libsdm.a: sdmmalloc.o
 	$(AR) rs $@ sdmmalloc.o
 
-aes: aes.o libsdm.a
-malloctest: malloctest.o libsdm.a
+aes: aes.o
+malloctest: malloctest.o 
 gen: gen.o
-graph: graph.o libsdm.a
-bigint: bigint.o libsdm.a
-dhrystone: dhrystone.o libsdm.a
-primes: primes.o libsdm.a
-qsort: qsort.o libsdm.a
-sha512: sha512.o libsdm.a
-norx: norx.o libsdm.a
-miniz: miniz.o libsdm.a
+graph: graph.o 
+bigint: bigint.o 
+dhrystone: dhrystone.o 
+primes: primes.o 
+qsort: qsort.o 
+sha512: sha512.o 
+norx: norx.o 
+miniz: miniz.o 
 
-sdmmalloc.o: sdmmalloc.cpp $(sdmmalloc.h)
-	$(CXX) $(CFLAGS) $(LDFLAGS) -c sdmmalloc.cpp 
+sdmmalloc.o: sdmmalloc.c $(sdmmalloc.h)
+	$(C) $(CFLAGS) $(LDFLAGS) $(FLAGS) -c sdmmalloc.c
 
 %: %.o
-	$(CXX) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(FLAGS)
 
 %.o: %.c $(sdmmalloc.h)
-	$(CXX) $(CFLAGS) -c $< $(LDFLAGS)
+	$(C) $(CFLAGS) -c $< $(LDLIBS) $(LDFLAGS) $(FLAGS)
 
 %.o: %.cpp $(sdmmalloc.h)
-	$(CXX) $(CFLAGS) -c $< $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -c $< $(LDLIBS) $(LDFLAGS) $(FLAGS)
 
 # aes.o:
 # 	$(CXX) -o aes.o aes.c sdmmalloc.cpp $(CFLAGS) $(LDFLAGS) 

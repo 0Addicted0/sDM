@@ -1,7 +1,10 @@
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
-#include "gem5/sdmmalloc.h"
+extern "C"
+{
+    #include "gem5/sdmmalloc.h"
+}
 using namespace std;
 #define sdm 1
 typedef struct _edge

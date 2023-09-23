@@ -97,7 +97,8 @@ namespace gem5
     void triggerWorkloadEvent(ThreadContext *tc);
     bool sdm_poster(ThreadContext *tc, uint64_t vaddr, size_t size);
     bool sdm_puller(ThreadContext *tc, uint64_t vaddr);
-    bool sdm_finder(ThreadContext *tc, uint64_t vaddr);
+    uint64_t sdm_finder(ThreadContext *tc, uint64_t vaddr);
+    bool sdm_realloc(ThreadContext *tc, uint64_t vaddr, size_t size, uint64_t vsrc, uint64_t src_size);
     /**
      * Execute a decoded M5 pseudo instruction
      *
@@ -227,6 +228,8 @@ namespace gem5
         result = invokeSimcall<ABI, store_ret>(tc, sdm_finder);
         return true;
       case M5OP_RESERVED4:
+        result = invokeSimcall<ABI, store_ret>(tc, sdm_realloc);
+        return true;
       case M5OP_RESERVED5:
         warn("Unimplemented m5 op (%#x)\n", func);
         return false;

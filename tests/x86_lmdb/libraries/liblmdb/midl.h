@@ -33,6 +33,8 @@
 extern "C" {
 #endif
 
+#include "sdm.h"
+
 /** @defgroup internal	LMDB Internals
  *	@{
  */

@@ -111,6 +111,7 @@
     M5OP(m5_sdm_poster, M5OP_RESERVED1)                            \
     M5OP(m5_sdm_puller, M5OP_RESERVED2)                            \
     M5OP(m5_sdm_finder, M5OP_RESERVED3)                            \
+    M5OP(m5_sdm_realloc, M5OP_RESERVED4)                            \
 
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b

@@ -15,28 +15,28 @@ int main(int argc, char *argv[])
     rc = mdb_env_create(&env);
     if (rc)
     {
-        printf("mdb_env_create error,detail:%s\n",
+        printf("mdb_env_create error, detail:%s\n",
                mdb_strerror(rc));
         return -1;
     }
     // 打开数据库，如果目录为空，将在该目录内初始化一个数据库
     rc = mdb_env_open(env, "./db/hello", 0, 0644);
     if(rc){
-        printf("mdb_env_open error,detail:%s\n",
+        printf("mdb_env_open error, detail:%s\n",
         mdb_strerror(rc));
         return -1;
     }
     rc = mdb_txn_begin(env, NULL, 0, &txn);
     if (rc)
     {
-        printf("mdb_txn_begin error,detail:%s\n",
+        printf("mdb_txn_begin error, detail:%s\n",
                mdb_strerror(rc));
         return -1;
     }
     rc = mdb_dbi_open(txn, NULL, 0, &dbi);
     if (rc)
     {
-        printf("mdb_dbi_open error,detail:%s\n",
+        printf("mdb_dbi_open error, detail:%s\n",
                mdb_strerror(rc));
         return -1;
     }
@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
     // 写入key-value数据
     rc = mdb_put(txn, dbi, &key, &data, 0);
     // 提交(持久化)
-    //rc = mdb_txn_commit(txn);
+    // rc = mdb_txn_commit(txn);
     /*
     if (rc)
     {

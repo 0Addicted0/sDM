@@ -7,6 +7,7 @@ libdir = $(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out
 LDFLAGS	= -L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out -lm5
 SOEXT	= .so
 OPT = -O3
+# -D _sDM_=1
 CFLAGS	= $(OPT) -I$(GEM5_HOME)/include
 ILIBS = libmymalloc$(SOEXT)
 
@@ -23,4 +24,4 @@ libmymalloc$(SOEXT):	mymalloc.lo
 mymalloc.lo:	mymalloc.c 
 	$(C) -o $@ $(CFLAGS) -fPIC -c $^ $(CFLAGS) $(LDFLAGS)
 clean:
-	rm *.lo *.so *.o *.out
+	rm *.lo *.so *.out

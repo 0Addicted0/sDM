@@ -667,6 +667,7 @@ namespace gem5
             RequestorID _requestorId;
             Process *process;    // 是为了使用pTable而引入与实际情况是不相符的
             sdmID sdm_space_cnt; // sDM_space编号器全局单增,2^64永远不会耗尽, start from 1
+            sdmID sdm_dropped_cnt;   // 清除的sdm空间数量 
             int local_pool_id;   // 记录每个process/workload的本地pool的编号
             int remote_pool_id;  // 可用本地内存池(内存段)编号
             // hash/encryption时延
@@ -703,9 +704,9 @@ namespace gem5
             bool hmac_verify(Addr dataPAddr, Addr rva, Addr *hmacAddr, sdmID id, uint8_t *hpg_data, iit_NodePtr counter, sdm_hashKey hash_key);
             Addr find(Addr head, Addr offset, int skip, int known, int &pnum);
             void sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey, std::vector<phy_space_block> r_hmac_phy_list,
-                               std::vector<phy_space_block> r_iit_phy_list, uint32_t h, sdm_space &sp);
+                               std::vector<phy_space_block> r_iit_phy_list, uint32_t h, sdm_space &sp, Addr src, uint64_t src_size);
             sdmID isContained(uint64_t pid, Addr vaddr);
-            bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size);
+            bool sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size, Addr vsrc, uint64_t src_size);
             bool sDMspace_free(uint64_t pid, Addr vaddr);
             Addr getVirtualOffset(sdmID id, Addr paddr);
             int getKeyPath(sdmID id, Addr rva, Addr *keyPathAddr, iit_NodePtr keyPathNode);
@@ -729,6 +730,7 @@ namespace gem5
             uint64_t formula(uint64_t local_dL1, uint64_t local_dL2, uint64_t local_acc, uint64_t remote_acc, uint64_t enc_dec, uint64_t dhash);
             uint64_t delay(); // 返回本次Read/Write的时延
             void summary();
+            uint64_t addrTrans(uint64_t pid, Addr vaddr);
         };
     }
 }

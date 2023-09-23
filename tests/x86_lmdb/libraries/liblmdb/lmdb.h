@@ -171,6 +171,8 @@
 extern "C" {
 #endif
 
+#include "sdm.h"
+
 /** Unix permissions for creating files, or dummy definition for Windows */
 #ifdef _MSC_VER
 typedef	int	mdb_mode_t;

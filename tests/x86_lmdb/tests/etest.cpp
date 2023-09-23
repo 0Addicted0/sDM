@@ -4,6 +4,7 @@
  
 #include <lmdb.h>
  
+ 
 using namespace std;
  
 int main(int argc, char* argv[]){
@@ -49,7 +50,7 @@ int main(int argc, char* argv[]){
  
     do{
         //write data to lmdb
-        unsigned long long count=1000000;
+        unsigned long long count=100;
         unsigned long long value=0;
  
         auto start=std::chrono::system_clock::now();

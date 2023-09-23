@@ -287,7 +287,7 @@ namespace gem5
             printf("|local_Mem_latency   (Cycle)=%7d|\n", params.local_mem_latency);
             printf("|remote_Mem_latency  (Cycle)=%7d|\n", params.remote_mem_latency);
             printf("+-----------------------------------+\n");
-            sdm_space_cnt = 0;
+            sdm_space_cnt = sdm_dropped_cnt = 0;
             sdm_table.assign(1, sdm_space());
             isHotPageenable = true;
             KeypathCache = new sDMKeypathCache(this, onchip_cache_size, dram_cache_size,
@@ -347,6 +347,10 @@ namespace gem5
             }
             else
             {
+                if(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) == false)
+                {
+                    printf("[sDMM]Error invalid addr:0x%lx\n",gem5_addr);
+                }
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
                 lstat->addstat(gem5_addr, byte_size, true);
                 // memcpy(container, sDMdrams[local_pool_id]->toHostAddr(gem5_addr), byte_size);
@@ -383,6 +387,10 @@ namespace gem5
             }
             else
             {
+                if(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) == false)
+                {
+                    printf("[sDMM]Error invalid addr:0x%lx\n",gem5_addr);
+                }
                 assert(sDMdrams[local_pool_id]->getAddrRange().contains(gem5_addr) && "undefind addr");
                 lstat->addstat(gem5_addr, byte_size, false);
                 // memcpy(sDMdrams[local_pool_id]->toHostAddr(gem5_addr), data, byte_size);
@@ -499,6 +507,8 @@ namespace gem5
             if (!known)                                              // 首次进入不确定是否在该连续段中
             {
                 // 获取最后一个连续页的最后一个数据对的范围
+                // if((head + sDM_PAGE_SIZE - sizeof(local_jmp)) == 0xffffffffffffffff)
+                //     assert(0 && "invalid addr");
                 read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + sDM_PAGE_SIZE - sizeof(local_jmp));
                 flag = true;
                 if ((rbound.maxBound) > offset)
@@ -509,7 +519,11 @@ namespace gem5
             if (known == 1) // 在连续页的范围内
             {
                 if (!flag)
+                {
+                    // if((head + sDM_PAGE_SIZE - sizeof(local_jmp)) == 0xffffffffffffffff)
+                    //     assert(0 && "invalid addr");
                     read4Mem(sizeof(local_jmp), (uint8_t *)&rbound, head + sDM_PAGE_SIZE - sizeof(local_jmp));
+                }
                 // 在当前连续段内二分找出地址所在页
                 int l = -1;
                 int r = rbound.con;
@@ -518,6 +532,8 @@ namespace gem5
                     int mid = (r + l) >> 1;
                     // 读取页的最后一个数据对(本身就需要减去自身的大小),还要除去local_jmp
                     // 因此减去PAIR_SIZE+sizeof(local_jmp)
+                    // if((head + mid * sDM_PAGE_SIZE + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp) - PAIR_SIZE) == 0xffffffffffffffff)
+                    //     assert(0 && "invalid addr");
                     read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + mid * sDM_PAGE_SIZE + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp) - PAIR_SIZE); // ignore fill_num
                     if ((rboundp->pnum + rboundp->cnum) * sDM_PAGE_SIZE >= offset)
                         r = mid;
@@ -531,6 +547,8 @@ namespace gem5
                 // i                                j
                 l = skip - 1;
                 // r = sDM_PAGE_SIZE / PAIR_SIZE; // this will raise too many useless read
+                // if((head + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp)) == 0xffffffffffffffff)
+                //     assert(0 && "invalid addr");
                 read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + sDM_PAGE_SIZE - PAIR_SIZE - sizeof(local_jmp)); // Read fill_num
                 uint32_t fill_num = rboundp->cnum;
                 r = l + 1 + rboundp->cnum - 1 + 1; // rewind to the last data pair
@@ -538,6 +556,8 @@ namespace gem5
                 while (r - l > 1)
                 {
                     mid = (r + l) >> 1;
+                    // if((head + (mid * PAIR_SIZE)) == 0xffffffffffffffff)
+                    //     assert(0 && "invalid addr");
                     read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (mid * PAIR_SIZE));
                     if ((rboundp->pnum + rboundp->cnum) * sDM_PAGE_SIZE > offset || // debug >= -> >
                         (rboundp->pnum == 0xffffffff && rboundp->cnum == fill_num))
@@ -547,7 +567,11 @@ namespace gem5
                 }
                 // 在第r个数据对中找到所在页
                 if (mid != r) // 避免重读
+                {
+                    // if((head + (r * PAIR_SIZE)) == 0xffffffffffffffff)
+                    //     assert(0 && "invalid addr");
                     read4Mem(PAIR_SIZE, (uint8_t *)&rbound, head + (r * PAIR_SIZE));
+                }
                 head = rboundp->curPageAddr;
                 head += offset - rboundp->pnum * sDM_PAGE_SIZE;
                 pnum = rboundp->pnum + (offset - rboundp->pnum * sDM_PAGE_SIZE) / sDM_PAGE_SIZE;
@@ -559,6 +583,11 @@ namespace gem5
                 // 注意这里应该是找到一个连续段最大地址范围对小于等于offset的skip
                 skip_jmp jmps[skip];
                 // 从本地内存中读取skip list
+                // if(head == 0xffffffffffffffff)
+                // {
+                //     printf("offset:0x%lx\n",offset);
+                //     assert(0 && "invalid addr");
+                // }
                 read4Mem(sizeof(skip_jmp) * skip, (uint8_t *)jmps, head);
                 int i = skip - 1;
                 while ((jmps[i].maxBound > offset) && (i > 0))
@@ -598,8 +627,10 @@ namespace gem5
                     uint64_t pseudo_vaddr = ((id << ID_OFFSET) | offsetiit) & PAGE_ALIGN_MASK;
                     NodePAddr = (addrCache->access(pseudo_vaddr)) | (offsetiit & (sDM_PAGE_SIZE - 1));
                     // if(NodePAddr != tNodePAddr)
-                    //     printf("[error]");
-                    // printf("iMT_ADDR_CACHE [%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, tNodePAddr=0x%lx, *NodePAddr=0x%lx\n", curTick(), rva, offsetiit, pseudo_vaddr, tNodePAddr, NodePAddr);
+                    // {
+                    //     // printf("[sDMM]Error addr cache\n");
+                    //     printf("iMT_ADDR_CACHE [%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, tNodePAddr=0x%lx, *NodePAddr=0x%lx\n", curTick(), rva, offsetiit, pseudo_vaddr, tNodePAddr, NodePAddr);
+                    // }
                     // pnum = addrCache->pnum;// maybe useless
                 }
                 keyPathAddr[i] = NodePAddr; // 目标节点的远端物理地址
@@ -750,7 +781,7 @@ namespace gem5
          */
         void sDMmanager::sDMspace_init(Addr vaddr, size_t byte_size, sdm_CMEKey ckey, sdm_hashKey hkey,
                                        std::vector<phy_space_block> r_hmac_phy_list, std::vector<phy_space_block> r_iit_phy_list,
-                                       uint32_t h, sdm_space &sp)
+                                       uint32_t h, sdm_space &sp, Addr src_paddr, uint64_t src_size)
         {
             assert(r_hmac_phy_list.size() > 0);
             // 向数据空间写入0(并加密)
@@ -761,6 +792,10 @@ namespace gem5
             {
                 // 分CL加密并写入
                 uint8_t buf[64] = {0}; // 64字节的缓存行
+                if(src_paddr && src_size < i * CL_SIZE)// realloc mode
+                {
+                    memcpy(sDMdrams[remote_pool_id]->toHostAddr(src_paddr + i * CL_SIZE), buf, CL_SIZE);// no cost read
+                }
                 auto entry = process->pTable->lookup(addr & PAGE_ALIGN_MASK);
                 assert(entry != NULL);
                 Addr paddr = entry->paddr + (addr & (~PAGE_ALIGN_MASK));
@@ -853,6 +888,7 @@ namespace gem5
             }
             memcpy((uint8_t *)(&sp.Root), (uint8_t *)(&node), sizeof(iit_Node)); // 单独存储片上根
             // printf("[%ld]sDM space initialization completed\n", curTick());
+            free(encrypteddata);
             return;
         }
         /**
@@ -866,23 +902,33 @@ namespace gem5
             if (id == INVALID_SPACE)
                 return false;
             printf("[%ld]in sDMspace_free:\n", curTick());
-            printf("\tpid=%ld\n", pid);
-            printf("\tvaddr=0x%lx\n", vaddr);
+            // printf("\tpid=%ld\n", pid);
+            // printf("\tvaddr=0x%lx\n", vaddr);
             const gem5::EmulationPageTable::Entry *entry = process->pTable->lookup(vaddr);
             assert(entry && "addr is unmapped");
-            printf("\tpaddr=0x%lx\n", entry->paddr);
-            printf("\tsize=%ldkB\n", sdm_table[id].sDataSize / 1024);
+            // printf("\tpaddr=0x%lx\n", entry->paddr);
+            // printf("\tsize=%ldkB\n", sdm_table[id].sDataSize / 1024);
             printf("\tspace_id=%ld\n", id);
-            auto sp = sdm_table.begin();
+            [[maybe_unused]]auto sp = sdm_table.begin();
+            sdm_paddr2id[pid].erase(vaddr);
+            
+            // this will raise index != id
+            /*
             for (; sp != sdm_table.end(); sp++)
             {
                 if (sp->id == id)
                 {
-                    sdm_table.erase(sp);
+                    // sdm_table.erase(sp); 
+                    sdm_dropped_cnt++;
                     break;
                 }
             }
-            if (sdm_table.size() == 1)
+            */
+            // => 
+            assert(sdm_table[id].id == id);
+            sdm_dropped_cnt++;
+
+            if (sdm_dropped_cnt == sdm_space_cnt)
                 summary();
             return true;
         }
@@ -895,7 +941,7 @@ namespace gem5
          * @attention 初始化这些空间的数据没有实现*
          */
         bool
-        sDMmanager::sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size)
+        sDMmanager::sDMspace_register(uint64_t pid, Addr vaddr, size_t data_byte_size, Addr vsrc, sdm_size src_size)
         {
             assert(data_byte_size && "data is empty");              // data_size is not zero
             assert(((vaddr & (sDM_PAGE_SIZE - 1)) == 0) &&          // 地址按照页面对齐
@@ -940,8 +986,8 @@ namespace gem5
             // 为新空间设置密钥 暂时简单使用id做密钥
             memset(&sp.cme_key, 0, sizeof(sp.cme_key));
             memset(&sp.hash_key, 0, sizeof(sp.hash_key));
-            memcpy(&sp.cme_key, &sp.id, sizeof(sp.id));
-            memcpy(&sp.hash_key, &sp.id, sizeof(sp.id));
+            // memcpy(&sp.cme_key, &sp.id, sizeof(sp.id));
+            // memcpy(&sp.hash_key, &sp.id, sizeof(sp.id));
             // 为新空间的HMAC和iit申请远端内存空间
             std::vector<phy_space_block> r_hmac_phy_list;
             std::vector<phy_space_block> r_iit_phy_list;
@@ -953,7 +999,11 @@ namespace gem5
             sp.key_get(CME_KEY_TYPE, tmp_ckey);
             sdm_hashKey tmp_hkey;
             sp.key_get(HASH_KEY_TYPE, tmp_hkey);
-            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list, sp.iITh, sp);
+            if(vsrc)
+            {
+                vsrc = addrTrans(pid, vsrc);// get old space (extend for realloc)
+            }
+            sDMspace_init(vaddr, data_size, tmp_ckey, tmp_hkey, r_hmac_phy_list, r_iit_phy_list, sp.iITh, sp, vsrc, src_size);
             // 预估所需页面数量,同时填写跳数、每页可写数据对数量
             int hmac_per, iit_per;
             int hmac_lpage_num = pred_local_page_need(sp.hmac_skip, r_hmac_phy_list.size(), hmac_per);
@@ -986,11 +1036,13 @@ namespace gem5
 \th=%dLayers(root included)\n",
                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id,
                    iit_size, hmac_size, sp.iITh);
+
+            //printf("[%12ld]in sDMspace_register:\n\tspace_id=%ld\n", curTick(), sp.id);
             /*
-                        \tHMAC pageAddrSet paddr=0x%lx\n\
-            \tiMT  pageAddrSet paddr=0x%lx\n",
-                                           curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
-                                           r_hmac_phy_list[0].start, r_iit_phy_list[0].start);
+\tHMAC pageAddrSet paddr=0x%lx\n\
+\tiMT  pageAddrSet paddr=0x%lx\n",
+                    curTick(), pid, vaddr, entry->paddr + (vaddr & (sDM_PAGE_SIZE - 1)), data_byte_size / 1024, sp.id, iit_size, hmac_size, sp.iITh,
+                    r_hmac_phy_list[0].start, r_iit_phy_list[0].start);
             */
             return true;
         }
@@ -1027,6 +1079,9 @@ namespace gem5
             pageAddr |= (dataVAddr & (sDM_PAGE_SIZE >> 1));
             uint8_t calc_hmac[SM3_SIZE];
             // 读取所在半页的内存数据
+            // if(pageAddr == 0xffffffffffffffff)
+            //     assert(0 && "invalid addr");
+
             if (isHotPageenable)
             {
                 if (!HotPageCache->CacheAccess(pageAddr, hpg_data, true))
@@ -1043,7 +1098,7 @@ namespace gem5
             //  计算HMAC
             hmac_get(hpg_data, pageAddr, counters, hash_key, calc_hmac);
             // 与存储值比较
-            // [[maybe_unused]]int pnum = 0;
+            [[maybe_unused]]int pnum = 0;
             uint64_t offset = (rva / (sDM_PAGE_SIZE >> 1)) * SM3_SIZE;
             // rva是数据的虚拟空间的相对偏移，需按半页转换成hmac存储空间的相对偏移
             // *hmacAddr = find((Addr)sdm_table[id].HMACPtrPagePtr, offset, sdm_table[id].hmac_skip, 0, pnum);
@@ -1052,12 +1107,15 @@ namespace gem5
             uint64_t pseudo_vaddr = ((id << ID_OFFSET) | (ID_HMAC_) | offset) & PAGE_ALIGN_MASK;
             *hmacAddr = (addrCache->access(pseudo_vaddr)) | (offset & (sDM_PAGE_SIZE - 1));
             // if(*hmacAddr != thmacAddr)
-            //     printf("[error]");
-            // printf("HMAC_ADDR_CACHE[%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, thmacAddr=0x%lx, *hmacAddr=0x%lx\n", curTick(), rva, offset, pseudo_vaddr, thmacAddr, *hmacAddr);
+            // {   
+            //      printf("HMAC_ADDR_CACHE[%ld]: id=%ld, offset=0x%lx, pseudo_vaddr=0x%lx, thmacAddr=0x%lx, *hmacAddr=0x%lx\n", curTick(), rva, offset, pseudo_vaddr, thmacAddr, *hmacAddr);
+            // }
             // *hmacAddr = thmacAddr;
             // pnum = addrCache->pnum; // maybe useless
             sdm_HMAC stored_hmac;
             // 从内存中读取HMAC
+            // if(*hmacAddr == 0xffffffffffffffff)
+            //     assert(0 && "invalid addr");
             read4Mem(sizeof(sdm_HMAC), stored_hmac, *hmacAddr);
             assert(memcmp(calc_hmac, stored_hmac, sizeof(sdm_HMAC)) == 0 && "HMAC verify failed");
             return true;
@@ -1329,6 +1387,8 @@ namespace gem5
 
         void sDMmanager::AccessMemory(Addr addr, uint8_t *databuf, bool isread = 1, uint8_t datasize = 64)
         {
+            // if(addr == 0xffffffffffffffff)
+            //     assert(0 && "invalid addr");
             if (isread)
             {
                 read4Mem(datasize, databuf, addr);
@@ -1441,6 +1501,12 @@ namespace gem5
             addrCache->print_cache();
             printf("# encrypt and decrypt:\n");
             lstat->print_enc_dec();
+        }
+        uint64_t sDMmanager::addrTrans(uint64_t pid, Addr vaddr)
+        {
+            auto entry = process->pTable->lookup(vaddr & PAGE_ALIGN_MASK);
+            assert(entry != NULL);
+            return entry->paddr + (vaddr & (~PAGE_ALIGN_MASK));
         }
 
         void
@@ -1638,6 +1704,8 @@ namespace gem5
 						newCtrLinkNode->CacheLineAddr = (uint8_t*)malloc(sizeof(uint8_t) * CacheLinesize);
 						newCtrLinkNode->hpageaddr = key;
 						// read from remote mem
+                        // if(key == 0xffffffffffffffff)
+                        //     assert(0 && "invalid addr");
 						sDMmanagerptr->read4Mem(CacheLinesize, newCtrLinkNode->CacheLineAddr, key);
 						if (isread)
 						{
@@ -1728,7 +1796,8 @@ namespace gem5
             // 地址按半页对齐。
             Addr hPageaddr = (addr & PAGE_ALIGN_MASK) | (addr & (sDM_PAGE_SIZE >> 1));
             uint8_t *hPagedata = (uint8_t *)malloc(sizeof(uint8_t) * (sDM_PAGE_SIZE >> 1));
-
+            // if(addr == 0xffffffffffffffff)
+            //     assert(0 && "invalid addr");
             if (!CacheAccess(hPageaddr, hPagedata, true))
             {
                 // 从远端读
@@ -1851,7 +1920,9 @@ namespace gem5
             else
             {
                 uint8_t a[CL_SIZE];
-                sDMmanagerptr->read4gem5(CL_SIZE, (uint8_t *)(a), key);
+                // if(key == 0xffffffffffffffff)
+                //     assert(0 && "invalid addr");
+                sDMmanagerptr->read4Mem(CL_SIZE, (uint8_t *)(a), key);
 
                 // 未命中
                 uint64_t pagectr = 1;
@@ -1928,6 +1999,5 @@ namespace gem5
             }
             return false;
         }
-
     }
 }

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+env_file=""
 # source scons # 在服务器中执行(非标准路径下的scon)
 mkdir -p db
 cd db && mkdir -p hello test
@@ -24,13 +25,19 @@ cd ../
 #####################################################
 # 用于静态库链接到lmdb以及lmdb test prog中
 cd x86_lmdb
-./run.sh
+if [ "$1" = "static" ]; then
+    echo "[Static Mode]"
+    ./run.sh static # use static lib 
+else
+    env_file="env.sh"
+    ./run.sh
+fi
 cd ../../
 
 #################################################
 # compile malloc hook && install libmymalloc.so # /util/m5/build/x86/out/libmymalloc.so
 #################################################
-# 用于LD_PRELOAD动态重载malloc等函数
+# 用于编译LD_PRELOAD动态重载的malloc,calloc等函数
 cd hook
 make -j$(nproc) && make install
 cd ../
@@ -39,28 +46,22 @@ cd ../
 # build simulator Gem5 #
 ########################
 scons build/X86/gem5.opt -j$(nproc)
-
 test_dir="$(pwd)/tests"
-
-name=hello
-pname="$name.o"
 ########## lmdb ##########
-mkdir -p $test_dir/db/$name
+# mkdir -p $test_dir/db/$name
 # ########## lmdb ##########
 
 ########################
 #   start simulation   #
 ########################
-Gem5dir="$(pwd)"
 build/X86/gem5.opt \
     configs/example/se.py \
     --caches --l1d_size=128B --l1i_size=128B \
     --mem-type=DDR3_1600_8x8 --mem-size=512MB --pool_ids='0,1;' \
-    --sDMenable=true --fast_mode=0 --hash_lat=20 --enc_lat=20 --onchip_cache_size=4 --onchip_cache_lat=16 --dram_cache_size=2048 --lmem_lat=150 --rmem_lat=600 \
+    --sDMenable=true --fast_mode=1 --hash_lat=20 --enc_lat=20 --onchip_cache_size=16 --onchip_cache_lat=16 --dram_cache_size=2048 --lmem_lat=150 --rmem_lat=600 \
     --cpu-type=TimingSimpleCPU \
-    --env='env.sh' \
-    --cmd="$test_dir/x86_lmdb/tests/$pname" #
-unset LD_LIBRARY_PATH
+    --env="$env_file" \
+    --cmd="$test_dir/x86_lmdb/tests/test.o"
 # --cmd="$test_dir/malloctest/$pname"
 # $test_dir/malloctest/aes.o
 # $test_dir/x86_lmdb/tests/hello.o

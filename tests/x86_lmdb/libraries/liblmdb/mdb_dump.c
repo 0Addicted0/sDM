@@ -192,6 +192,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			list = 1;
+			[[fallthrough]];
 			/*FALLTHROUGH*/;
 		case 'a':
 			if (subname)

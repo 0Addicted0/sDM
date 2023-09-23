@@ -6,9 +6,10 @@ GEM5_HOME = $(HOME)/../..
 
 CXX=g++
 C=gcc
+FLAGS = --static
 
 CFLAGS = -I$(HOME)/build/include
-LDFLAGS = -lpthread -L$(HOME)/build/lib -llmdb -L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out -lsdm -lm5
+LDFLAGS = -lpthread -L$(HOME)/build/lib -L$(GEM5_HOME)/util/m5/build/$(TARGET_ISA)/out $(FLAGS) -llmdb -lsdm -lm5 
 
 all:
 	$(CXX) test.cpp $(CFLAGS) $(LDFLAGS) -o test.o

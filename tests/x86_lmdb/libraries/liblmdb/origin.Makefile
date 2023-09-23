@@ -39,7 +39,7 @@ mandir = $(datarootdir)/man
 
 ########################################################################
 
-IHDRS	= lmdb.h
+IHDRS	= lmdb.h sdm.h
 ILIBS	= liblmdb.a liblmdb$(SOEXT)
 IPROGS	= mdb_stat mdb_copy mdb_dump mdb_load
 IDOCS	= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
@@ -81,22 +81,22 @@ mtest4:	mtest4.o liblmdb.a
 mtest5:	mtest5.o liblmdb.a
 mtest6:	mtest6.o liblmdb.a
 
-mdb.o: mdb.c lmdb.h midl.h
+mdb.o: mdb.c sdm.h lmdb.h midl.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c mdb.c
 
-midl.o: midl.c midl.h
+midl.o: midl.c sdm.h midl.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c midl.c
 
-mdb.lo: mdb.c lmdb.h midl.h
+mdb.lo: mdb.c sdm.h lmdb.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c mdb.c -o $@
 
-midl.lo: midl.c midl.h
+midl.lo: midl.c sdm.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c midl.c -o $@
 
 %:	%.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-%.o:	%.c lmdb.h
+%.o:	%.c sdm.h lmdb.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
 
 COV_FLAGS=-fprofile-arcs -ftest-coverage
@@ -112,8 +112,8 @@ coverage: xmtest
 xmtest:	mtest.o xmdb.o xmidl.o
 	gcc -o xmtest mtest.o xmdb.o xmidl.o -pthread $(COV_FLAGS)
 
-xmdb.o: mdb.c lmdb.h midl.h
+xmdb.o: mdb.c sdm.h lmdb.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c mdb.c -o $@
 
-xmidl.o: midl.c midl.h
+xmidl.o: midl.c sdm.h midl.h
 	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c midl.c -o $@

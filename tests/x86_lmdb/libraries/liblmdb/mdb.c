@@ -93,11 +93,6 @@ extern int cacheflush(char *addr, int nbytes, int cache);
 #define	BROKEN_FDATASYNC
 #endif
 
-// #define _sDM_ 1 // enable _sDM_
-#ifdef _sDM_
-#include "gem5/sdmmalloc.h"
-#endif
-
 #include <errno.h>
 #include <limits.h>
 #include <stddef.h>
@@ -1522,6 +1517,7 @@ mdb_strerror(int err)
 		NULL, err, 0, ptr, MSGSIZE, (va_list *)buf+MSGSIZE);
 	return ptr;
 #else
+	printf("[lmdb cpp]err=%d\n",err);
 	return strerror(err);
 #endif
 }
@@ -3952,15 +3948,10 @@ mdb_env_pick_meta(const MDB_env *env)
 int ESECT
 mdb_env_create(MDB_env **env)
 {
-	printf("[mdb_env_create] ");
 	MDB_env *e;
-#ifndef _sDM_
-	printf("calloc->malloc:%p\n",malloc);
-	e = malloc(sizeof(MDB_env));
-#endif
-
+	e = calloc(1, sizeof(MDB_env));
 #ifdef _sDM_
-	e = sdmmalloc(sizeof(MDB_env));
+	printf("[lmdb]sDM define\n");
 #endif 
 	if (!e)
 		return ENOMEM;
@@ -4199,6 +4190,7 @@ mdb_fname_init(const char *path, unsigned envflags, MDB_name *fname)
 	if (no_suffix)
 		fname->mn_val = (char *) path;
 	else if ((fname->mn_val = malloc(fname->mn_len + MDB_SUFFLEN+1)) != NULL) {
+		printf("[lmdb cpp]fname=%p\n",fname->mn_val);
 		fname->mn_alloced = 1;
 		strcpy(fname->mn_val, path);
 	}
@@ -4301,11 +4293,18 @@ mdb_fopen(const MDB_env *env, MDB_name *fname,
 	}
 	fd = CreateFileW(fname->mn_val, acc, share, NULL, disp, attrs, NULL);
 #else
-	fd = open(fname->mn_val, which & MDB_O_MASK, mode);
+	// if(strcmp(fname->mn_val, "./db/test/lock.mdb")==0)
+	// 	fd = open("./db/test/lock.mdb", which & MDB_O_MASK, mode);
+	// else 
+		fd = open(fname->mn_val, which & MDB_O_MASK, mode);
 #endif
 
 	if (fd == INVALID_HANDLE_VALUE)
+	{
 		rc = ErrCode();
+
+		printf("[lmdb cpp]open file failed path:%s, rc=%d\n", fname->mn_val, rc);
+	}
 #ifndef _WIN32
 	else {
 		if (which != MDB_O_RDONLY && which != MDB_O_RDWR) {
@@ -4997,6 +4996,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 		goto leave;
 
 	env->me_path = strdup(path);
+	printf("[lmdb cpp]env->me_path=%p\n",env->me_path);
 	env->me_dbxs = calloc(env->me_maxdbs, sizeof(MDB_dbx));
 	env->me_dbflags = calloc(env->me_maxdbs, sizeof(uint16_t));
 	env->me_dbiseqs = calloc(env->me_maxdbs, sizeof(unsigned int));
@@ -5017,7 +5017,10 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 		(flags & MDB_RDONLY) ? MDB_O_RDONLY : MDB_O_RDWR,
 		mode, &env->me_fd);
 	if (rc)
+	{
+		printf("[lmdb cpp]mdb_fopen failed\n");
 		goto leave;
+	}
 
 	if ((flags & (MDB_RDONLY|MDB_NOLOCK)) == MDB_RDONLY) {
 		rc = mdb_env_setup_locks(env, &fname, mode, &excl);

@@ -78,7 +78,11 @@ bool m5_sdm_puller(uint64_t vaddr);
 /**
  * @brief 检查是否属于安全空间
 */
-bool m5_sdm_finder(uint64_t vaddr);
+uint64_t m5_sdm_finder(uint64_t vaddr);
+/**
+ * @brief 完成sDM对空间的realloc
+*/
+bool m5_sdm_realloc(uint64_t vaddr, size_t size, uint64_t vsrc, uint64_t src_size);
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
  * the workload to know what information to look for to interpret an event,

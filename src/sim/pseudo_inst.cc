@@ -632,7 +632,7 @@ namespace gem5
             // tc->getProcessPtr()->sDMmanager->sdm_register(pid,vaddr,size);
             Process *process = tc->getProcessPtr();
             uint64_t pid = process->pid();
-            return process->sDMmanager && process->sDMmanager->sDMspace_register(pid, vaddr, size);
+            return process->sDMmanager && process->sDMmanager->sDMspace_register(pid, vaddr, size, 0, 0);
         }
         /**
          * @brief 通过process中的指针调用sDMspace_free
@@ -646,13 +646,31 @@ namespace gem5
         }
         /**
          * @brief 返回检查是否属于安全空间
+         * @return:sDM space size / 0=>non-secure space
         */
-       bool
+       uint64_t
        sdm_finder(ThreadContext *tc, Addr vaddr)
        {
             Process *process = tc->getProcessPtr();
             uint64_t pid = process->pid();
-            return process->sDMmanager && (process->sDMmanager->isContained(pid, vaddr) != 0);
+            uint64_t id = 0;
+            if(process->sDMmanager && (id = process->sDMmanager->isContained(pid, vaddr))!= 0)
+            {
+                // 位于sDM空间中
+                return process->sDMmanager->sdm_table[id].sDataSize;// 返回数据区大小
+            }
+            return 0;
+       }
+       /**
+        * @brief realloc
+        * 
+       */
+       bool 
+       sdm_realloc(ThreadContext *tc, uint64_t vaddr, size_t size, uint64_t vsrc, size_t src_size)
+       {
+            Process *process = tc->getProcessPtr();
+            uint64_t pid = process->pid();
+            return process->sDMmanager && process->sDMmanager->sDMspace_register(pid, vaddr, size, vsrc, src_size);
        }
     } // namespace pseudo_inst
 } // namespace gem5
