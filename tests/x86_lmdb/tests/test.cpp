@@ -29,12 +29,11 @@ int main()
         return -1;
     }
     
-    res = mdb_env_open(env, ".", 0, 0644);
+    res = mdb_env_open(env, "./db/test", 0, 0644);
     if(res){
         printf("mdb_env_open error, detail:%s\n", mdb_strerror(res));
         return -1;
     }
- 
     res = mdb_txn_begin(env, NULL, 0, &txn);
     if(res){
         printf("mdb_txn_begin error, detail:%s\n", mdb_strerror(res));
@@ -46,13 +45,14 @@ int main()
         printf("mdb_dbi_open error, detail:%s\n", mdb_strerror(res));
         return -1;
     }
-    //write data to lmdb
-    unsigned long long count=10;
-    unsigned long long value=0;
+    //
+    //write to mem
+    int count=10;
+    int value=0;
 
-    unsigned long long i=0;
+    int i=0;
     for(;i<count;++i){
-        value=i+1;
+        value=(i<<1)*i+1;
 
         key.mv_size =sizeof(i);
         key.mv_data =(void*)&i;
@@ -65,18 +65,41 @@ int main()
             printf("mdb_put error,res=%d, detail:%s",res,mdb_strerror(res));
             break;
         }
+        else 
+        {
+            printf("[S]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
+        }
     }
+    // read from mem
+    for(i=0;i<count;++i){
 
+        key.mv_size =sizeof(i);
+        key.mv_data =(void*)&i;
+        data.mv_size = sizeof(value);
+
+        res = mdb_get(txn, dbi, &key, &data);
+        if(res!=0)
+        {
+            printf("mdb_put error,res=%d, detail:%s",res,mdb_strerror(res));
+            break;
+        }
+        else 
+        {
+            printf("[L]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
+        }
+    }
+    /* 
+    // 持久化
     res = mdb_txn_commit(txn);
     if (res) {
         printf("mdb_txn_commit error:%d:%s",res, mdb_strerror(res));
         return -1;
     }
     res = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-    res = mdb_cursor_open(txn, dbi, &cursor);
     //read data from lmdb
+    res = mdb_cursor_open(txn, dbi, &cursor);
 
-    unsigned long long read_count=0;
+    int read_count=0;
     while ((res = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
         int r_key=*(int *)key.mv_data;
         int r_value=*(int *)data.mv_data;
@@ -86,6 +109,7 @@ int main()
 
     printf("read count:%lld\n", read_count);
     mdb_cursor_close(cursor);
+    */
     mdb_txn_abort(txn);
     //free
     mdb_dbi_close(env, dbi);

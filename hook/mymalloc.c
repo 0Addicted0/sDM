@@ -10,7 +10,8 @@
 #define PAGE_ALIGN_MASK 0xfffffffffffff000 // 转换为页面对齐地址
 #define sDM_PAGE_SIZE (1<<12)
 #define CL_SIZE (1<<6)
-#define _sDM_ 1
+#define _sDM_ 1 // 是否启用sDM
+// #define _SDM_DBG_ 1 // 打印调试信息
 
 static void *(*real_malloc)(size_t) = NULL;
 static void *(*real_calloc)(size_t, size_t) = NULL;
@@ -25,7 +26,9 @@ static void __attribute__((constructor)) init(void) // 在main函数之前执行
 	real_free = (void (*)(void *))dlsym(RTLD_NEXT,"free");
 	real_realloc = (void *(*)(void *, size_t))dlsym(RTLD_NEXT, "realloc");
 	no_hook = 1;
+#ifdef _SDM_DBG_
 	printf("[lib]init...\n");
+#endif
 	no_hook = 0;
 }
 inline size_t align(size_t len)
@@ -62,12 +65,16 @@ void *malloc(size_t len)
 #ifdef _sDM_
 	if (!m5_sdm_poster((uint64_t)addr, len)) // m5ops解析无法解析int32的参数
 	{
+#ifdef _SDM_DBG_
 		printf("[lib]Apply for secure space failed\n");
+#endif
     }
     else 
     {
+#ifdef _SDM_DBG_
 		printf("[lib]malloc[0x%p, %ld]...\n", addr, len);
 		// printf("[lib]Apply for secure space[0x%p] success\n", addr);
+#endif
     }
 #endif
 #ifndef _sDM_
@@ -85,12 +92,16 @@ void *calloc(size_t __nmemb, size_t __size)
 	no_hook = 1;
 	if (!m5_sdm_poster((uint64_t)addr, len)) // m5ops解析无法解析int32的参数
 	{
+#ifdef _SDM_DBG_
 		printf("[lib]Apply for secure space failed\n");
+#endif
     }
     else 
     {
+#ifdef _SDM_DBG_
 		printf("[lib]calloc[0x%p, %ld]...\n", addr, len);
 		// printf("[lib]Apply for secure space[0x%p] success\n", addr);
+#endif
     }
 	no_hook = 0;
 #endif
@@ -122,7 +133,9 @@ void *realloc(void *__ptr, size_t __size)
 	void *addr = _sdm_malloc_(&__size);
 	assert(m5_sdm_realloc((uint64_t)addr, __size, (uint64_t)__ptr, size));
 	no_hook = 1;
+#ifdef _SDM_DBG_
 	printf("[lib]realloc[0x%p->0x%p, %ld]...\n", __ptr, addr, __size);
+#endif
 	no_hook = 0;
 	return addr;
 #endif
@@ -145,7 +158,9 @@ void free(void *ptr)
 		no_hook = 0;
 		return (*real_free)(ptr);
 	}
+#ifdef _SDM_DBG_
 	printf("[lib]Destroy secure space[0x%p]\n", ptr);// (void *)(*(uint64_t *)(ptr - sizeof(uint64_t))));
+#endif
 #endif
 #ifndef _sDM_
 	printf("[lib]Destroy non-secure space[0x%p]\n", ptr);

@@ -4,6 +4,7 @@ env_file=""
 # source scons # 在服务器中执行(非标准路径下的scon)
 mkdir -p db
 cd db && mkdir -p hello test
+rm -rf hello/* test/*
 cd ../
 ##########################
 # compile m5 instruction #

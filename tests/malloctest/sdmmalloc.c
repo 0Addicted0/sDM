@@ -26,20 +26,37 @@ void *sdmmalloc(size_t len)
     void *addr = _sdm_malloc_(&len);
 	if (!m5_sdm_poster((uint64_t)addr, len)) // m5ops解析无法解析int32的参数
 	{
+#ifdef _SDM_DBG_
 		printf("[lib]Apply for secure space failed\n");
+#endif
     }
     else 
     {
+#ifdef _SDM_DBG_
 		printf("[lib]malloc[0x%p, %ld]...\n", addr, len);
 		// printf("[lib]Apply for secure space[0x%p] success\n", addr);
+#endif
     }
 	return addr;
 }
 
 void *sdmcalloc(size_t len)
 {
-	printf("[lib]calloc\t");
-	return sdmmalloc(len);
+    void *addr = _sdm_malloc_(&len);
+	if (!m5_sdm_poster((uint64_t)addr, len)) // m5ops解析无法解析int32的参数
+	{
+#ifdef _SDM_DBG_
+		printf("[lib]Apply for secure space failed\n");
+#endif
+    }
+    else 
+    {
+#ifdef _SDM_DBG_
+		printf("[lib]calloc[0x%p, %ld]...\n", addr, len);
+		// printf("[lib]Apply for secure space[0x%p] success\n", addr);
+#endif
+    }
+	return addr;
 }
 
 void *sdmrealloc(void *__ptr, size_t __size)
@@ -52,7 +69,9 @@ void *sdmrealloc(void *__ptr, size_t __size)
 	}
 	void *addr = _sdm_malloc_(&__size);
 	assert(m5_sdm_realloc((uint64_t)addr, __size, (uint64_t)__ptr, size));
+#ifdef _SDM_DBG_
 	printf("[lib]realloc[0x%p->0x%p, %ld]...\n", __ptr, addr, __size);
+#endif
 	return addr;
 }
 
@@ -66,7 +85,9 @@ bool sdmfree(void *ptr)
 	}
     void *realptr = (void *)(*((uint64_t *)((uint8_t *)ptr - sizeof(uint64_t))));
     m5_sdm_puller((uint64_t)ptr);   //释放SDM 安全空间
+#ifdef _SDM_DBG_
 	printf("[lib]Destroy secure space[0x%p]\n", ptr);
+#endif
     free(realptr);
     return true;
 }

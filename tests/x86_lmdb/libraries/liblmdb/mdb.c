@@ -75,6 +75,8 @@
 #include <fcntl.h>
 #endif
 
+// #define _DEBUG_SMDB 1
+
 #if defined(__mips) && defined(__linux)
 /* MIPS has cache coherency issues, requires explicit cache control */
 #include <asm/cachectl.h>
@@ -1490,6 +1492,9 @@ mdb_strerror(int err)
 
 	if (err >= MDB_KEYEXIST && err <= MDB_LAST_ERRCODE) {
 		i = err - MDB_KEYEXIST;
+#ifdef _DEBUG_SMDB
+		printf("[lmdb]mdb_err=%d\n",err);
+#endif
 		return mdb_errstr[i];
 	}
 
@@ -1517,7 +1522,9 @@ mdb_strerror(int err)
 		NULL, err, 0, ptr, MSGSIZE, (va_list *)buf+MSGSIZE);
 	return ptr;
 #else
-	printf("[lmdb cpp]err=%d\n",err);
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]str_err=%d\n",err);
+#endif
 	return strerror(err);
 #endif
 }
@@ -2780,6 +2787,9 @@ mdb_txn_renew0(MDB_txn *txn)
 	memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
 
 	/* Moved to here to avoid a data race in read TXNs */
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]meta=%p meta->address=%p,meta->mm_txnid=%ld\n",meta, meta->mm_address,meta->mm_txnid);
+#endif
 	txn->mt_next_pgno = meta->mm_last_pg+1;
 
 	txn->mt_flags = flags;
@@ -2793,7 +2803,9 @@ mdb_txn_renew0(MDB_txn *txn)
 	}
 	txn->mt_dbflags[MAIN_DBI] = DB_VALID|DB_USRVALID;
 	txn->mt_dbflags[FREE_DBI] = DB_VALID;
-
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]env->me_maxpg=%ld, txn->mt_next_pgno=%ld\n", env->me_maxpg, txn->mt_next_pgno);
+#endif
 	if (env->me_flags & MDB_FATAL_ERROR) {
 		DPUTS("environment had fatal error, must shutdown!");
 		rc = MDB_PANIC;
@@ -2908,6 +2920,9 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB_txn **ret)
 	} else { /* MDB_RDONLY */
 		txn->mt_dbiseqs = env->me_dbiseqs;
 renew:
+#ifdef _DEBUG_SMDB
+		printf("[lmdb]bf renew txn=%p txn->mt_next_pgno=%ld\n",txn, txn->mt_next_pgno);
+#endif
 		rc = mdb_txn_renew0(txn);
 	}
 	if (rc) {
@@ -3758,6 +3773,9 @@ mdb_env_init_meta0(MDB_env *env, MDB_meta *meta)
 static int ESECT
 mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 {
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]in mdb_env_init_meta\n");
+#endif
 	MDB_page *p, *q;
 	int rc;
 	unsigned int	 psize;
@@ -3793,7 +3811,12 @@ mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 	q->mp_flags = P_META;
 	*(MDB_meta *)METADATA(q) = *meta;
 
-	DO_PWRITE(rc, env->me_fd, p, psize * NUM_METAS, len, 0);
+	char tmp[MAX_PAGESIZE * NUM_METAS]={0};
+	memcpy(tmp, p, psize * NUM_METAS);
+	DO_PWRITE(rc, env->me_fd, tmp, psize * NUM_METAS, len, 0);
+#ifdef _DEBUG_SMDB
+	printf("[lmdb] psize*NUM_METAS=%d, len=%d\n", psize * NUM_METAS, len);
+#endif
 	if (!rc)
 		rc = ErrCode();
 	else if ((unsigned) len == psize * NUM_METAS)
@@ -3969,12 +3992,18 @@ mdb_env_create(MDB_env **env)
 	GET_PAGESIZE(e->me_os_psize);
 	VGMEMP_CREATE(e,0,0);
 	*env = e;
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]in mdb_env_create %p,%p,fd=%d\n",e->me_metas[0],e->me_metas[1],e->me_fd);
+#endif
 	return MDB_SUCCESS;
 }
 
 static int ESECT
 mdb_env_map(MDB_env *env, void *addr)
 {
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]in mdb_env_map\n");
+#endif
 	MDB_page *p;
 	unsigned int flags = env->me_flags;
 #ifdef _WIN32
@@ -4057,7 +4086,9 @@ mdb_env_map(MDB_env *env, void *addr)
 	p = (MDB_page *)env->me_map;
 	env->me_metas[0] = METADATA(p);
 	env->me_metas[1] = (MDB_meta *)((char *)env->me_metas[0] + env->me_psize);
-
+#ifdef _DEBUG_SMDB
+	printf("[lmdb]mdb_env_map, 0=%ld, 1=%ld\n",env->me_metas[0]->mm_last_pg, env->me_metas[1]->mm_last_pg);
+#endif
 	return MDB_SUCCESS;
 }
 
@@ -4190,7 +4221,6 @@ mdb_fname_init(const char *path, unsigned envflags, MDB_name *fname)
 	if (no_suffix)
 		fname->mn_val = (char *) path;
 	else if ((fname->mn_val = malloc(fname->mn_len + MDB_SUFFLEN+1)) != NULL) {
-		printf("[lmdb cpp]fname=%p\n",fname->mn_val);
 		fname->mn_alloced = 1;
 		strcpy(fname->mn_val, path);
 	}
@@ -4293,18 +4323,14 @@ mdb_fopen(const MDB_env *env, MDB_name *fname,
 	}
 	fd = CreateFileW(fname->mn_val, acc, share, NULL, disp, attrs, NULL);
 #else
-	// if(strcmp(fname->mn_val, "./db/test/lock.mdb")==0)
-	// 	fd = open("./db/test/lock.mdb", which & MDB_O_MASK, mode);
-	// else 
-		fd = open(fname->mn_val, which & MDB_O_MASK, mode);
+		char tmp[MAXPATHLEN] = {0};
+		strcpy(tmp, fname->mn_val);
+		fd = open(tmp, which & MDB_O_MASK, mode);
+		// fd = open(fname->mn_val, which & MDB_O_MASK, mode);
 #endif
 
 	if (fd == INVALID_HANDLE_VALUE)
-	{
 		rc = ErrCode();
-
-		printf("[lmdb cpp]open file failed path:%s, rc=%d\n", fname->mn_val, rc);
-	}
 #ifndef _WIN32
 	else {
 		if (which != MDB_O_RDONLY && which != MDB_O_RDWR) {
@@ -4447,7 +4473,6 @@ mdb_env_open2(MDB_env *env)
 			return rc;
 		newenv = 0;
 	}
-
 	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta.mm_address : NULL);
 	if (rc)
 		return rc;
@@ -4996,7 +5021,6 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 		goto leave;
 
 	env->me_path = strdup(path);
-	printf("[lmdb cpp]env->me_path=%p\n",env->me_path);
 	env->me_dbxs = calloc(env->me_maxdbs, sizeof(MDB_dbx));
 	env->me_dbflags = calloc(env->me_maxdbs, sizeof(uint16_t));
 	env->me_dbiseqs = calloc(env->me_maxdbs, sizeof(unsigned int));
@@ -5018,7 +5042,9 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 		mode, &env->me_fd);
 	if (rc)
 	{
-		printf("[lmdb cpp]mdb_fopen failed\n");
+#ifdef _DEBUG_SMDB
+		printf("[lmdb]mdb_fopen failed\n");
+#endif
 		goto leave;
 	}
 
@@ -6999,7 +7025,6 @@ new_sub:
 			}
 		}
 	}
-
 	if (rc == MDB_SUCCESS) {
 		/* Now store the actual data in the child DB. Note that we're
 		 * storing the user data in the keys field, so there are strict
