@@ -678,6 +678,14 @@ namespace gem5
             uint64_t dram_cache_size;
             uint64_t remoteMemAccessLatency;
             uint64_t localMemAccessLatency;
+            uint64_t addr_translate_cache_size;
+            int addr_translate_cache_mode;
+            uint64_t addr_translate_cache_tagLatency;
+            uint64_t hot_page_cache_size;
+            uint64_t hot_page_cache_taglat;
+            uint64_t hot_page_cache_ctr_filter_size;
+            uint64_t hot_page_cache_backup_size;
+            uint64_t hot_page_cache_threshold;
             MemPools *mem_pools;              // 实例化时的内存池指针
             std::vector<sdm_space> sdm_table; // id->sdm
             // 拦截每次的访存的vaddr时,根据pid找到对应的sdm space表,查找此表对应到相应的space id vaddr <==> (page_num,space id)
@@ -687,6 +695,7 @@ namespace gem5
             sDMAddrCache *addrCache; // 针对find函数的cache
             sDMstat *lstat;         // 本地内存统计量
             sDMstat *rstat;         // 远端内存统计量
+            uint64_t _daddrhits;
             /**
              * @author psj
              * @brief 返回当前sDMmanager的_requestorId

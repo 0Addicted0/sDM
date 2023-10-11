@@ -58,8 +58,14 @@ test_dir="$(pwd)/tests"
 build/X86/gem5.opt \
     configs/example/se.py \
     --caches --l1d_size=128B --l1i_size=128B \
+    --l2cache --l2_size=1kB --l2_assoc=16 \
     --mem-type=DDR3_1600_8x8 --mem-size=512MB --pool_ids='0,1;' \
-    --sDMenable=true --fast_mode=1 --hash_lat=20 --enc_lat=20 --onchip_cache_size=16 --onchip_cache_lat=16 --dram_cache_size=2048 --lmem_lat=150 --rmem_lat=600 \
+    --lmem_lat=150 --rmem_lat=600 \
+    --sDMenable=true --fast_mode=1 \
+    --hash_lat=20 --enc_lat=20 \
+    --onchip_cache_size=16 --onchip_cache_lat=16 --dram_cache_size=256 \
+    --addr_cache_size=32 --addr_cache_mode=0 --addr_cache_taglat=0 \
+    --hot_page_cache_size=0 --hot_page_cache_ctr_filter_size=128 --hot_page_cache_backup_size=16 --hot_page_cache_threshold=2 \
     --cpu-type=TimingSimpleCPU \
     --env="$env_file" \
     --cmd="$test_dir/x86_lmdb/tests/test.o"

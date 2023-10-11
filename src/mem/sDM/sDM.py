@@ -52,5 +52,15 @@ class sDMmanager(ClockedObject):
     local_mem_latency = Param.Int(0, "local memory access latency(Cycles)")
     remote_mem_latency = Param.Int(0, "remote memory access latency(Cycles)")
 
+    addr_trans_cache_mode = Param.Int(0, "address translate cache eviction mode[0:LRU; 1:LFU]")
+    addr_trans_cache_size = Param.UInt64(0, "address translate cache line numbers")
+    addr_trans_cache_taglat = Param.UInt64(0, "address translate cache tag latency")
+    
+    hot_page_cache_size = Param.UInt64(0, "hot page cache line numbers")
+    # hot_page_cache_taglat = Param.UInt64(0, "hot page cache tag latency")
+    hot_page_cache_ctr_filter_size = Param.UInt64(64, "hot page cache ctr filter line numbers")
+    hot_page_cache_backup_size = Param.UInt64(64, "hot page cache backup line numbers")
+    hot_page_cache_threshold = Param.UInt64(2, "hot page cache threshold")
+
     mem_side = RequestPort("memory side port, send requests")
     system = Param.System(Parent.any, "System we belong to")

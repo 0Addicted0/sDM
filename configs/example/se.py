@@ -129,15 +129,26 @@ def get_processes(args):
             process.sDMmanager = sDMmanager()
             process.sDMmanager.remote_pool_id = pool_ids_v[0]
             process.sDMmanager.local_pool_id = pool_ids_v[1]
-            # give latency
+            # give hash/encrypt
             process.sDMmanager.hash_latency = int(args.hash_lat)
             process.sDMmanager.encrypt_latency = int(args.enc_lat)
-            # give cache size
-            process.sDMmanager.onchip_cache_size = int(args.onchip_cache_size)
-            process.sDMmanager.onchip_cache_latency = int(args.onchip_cache_lat)
-            process.sDMmanager.dram_cache_size = int(args.dram_cache_size)
+            # give dram latency
             process.sDMmanager.local_mem_latency = int(args.lmem_lat)
             process.sDMmanager.remote_mem_latency = int(args.rmem_lat)
+            # give addr translate cache
+            process.sDMmanager.addr_trans_cache_mode = int(args.addr_cache_mode) # 0:LRU 1:LFU
+            process.sDMmanager.addr_trans_cache_size = int(args.addr_cache_size) # 0 means disable
+            process.sDMmanager.addr_trans_cache_taglat = int(args.addr_cache_taglat) # tag latency
+            # give keypath cache
+            process.sDMmanager.onchip_cache_size = int(args.onchip_cache_size) # l1 latency = cache latency
+            process.sDMmanager.onchip_cache_latency = int(args.onchip_cache_lat)
+            process.sDMmanager.dram_cache_size = int(args.dram_cache_size) #l2 latency = local dram latency
+            # give hot page cache
+            process.sDMmanager.hot_page_cache_size = int(args.hot_page_cache_size) # latency = local_dram
+            process.sDMmanager.hot_page_cache_ctr_filter_size = int(args.hot_page_cache_ctr_filter_size) # latency = local_dram
+            process.sDMmanager.hot_page_cache_backup_size = int(args.hot_page_cache_backup_size) # latency = local_dram
+            process.sDMmanager.hot_page_cache_threshold = int(args.hot_page_cache_threshold) # latency = local_dram
+            # process.sDMmanager.hot_page_cache_taglat = int(args.hot_page_cache_taglat) # tag latency
             # give fast_mode
             process.sDMmanager.fast_mode = int(args.fast_mode)
         else:

@@ -805,6 +805,46 @@ def addSEOptions(parser):
         default=0,
         help="Specify the remote dram access latency(Cycles).",
     )
+    parser.add_argument(
+        "--addr_cache_size",
+        default=0,
+        help="Specify the addrTranslate cache line num.",
+    )
+    parser.add_argument(
+        "--addr_cache_mode",
+        default=0,
+        help="Specify the addrTranslate cache eviction mode.",
+    )
+    parser.add_argument(
+        "--addr_cache_taglat",
+        default=0,
+        help="Specify the addrTranslate cache tag latency.",
+    )
+    parser.add_argument(
+        "--hot_page_cache_size",
+        default=0,
+        help="Specify the hot page cache size(2048B).",
+    )
+    # parser.add_argument(
+    #     "--hot_page_cache_taglat",
+    #     default=0,
+    #     help="Specify the hot page cache tag latency.",
+    # )
+    parser.add_argument(
+        "--hot_page_cache_ctr_filter_size",
+        default=0,
+        help="Specify the hot page cache ctr filter size(2048B)",
+    )
+    parser.add_argument(
+        "--hot_page_cache_backup_size",
+        default=0,
+        help="Specify the hot page cache backup size(2048B).",
+    )
+    parser.add_argument(
+        "--hot_page_cache_threshold",
+        default=0,
+        help="Specify the hot page cache hot-threshold.",
+    )
 
 
 def addFSOptions(parser):

@@ -3811,9 +3811,9 @@ mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 	q->mp_flags = P_META;
 	*(MDB_meta *)METADATA(q) = *meta;
 
-	char tmp[MAX_PAGESIZE * NUM_METAS]={0};
-	memcpy(tmp, p, psize * NUM_METAS);
-	DO_PWRITE(rc, env->me_fd, tmp, psize * NUM_METAS, len, 0);
+	// char tmp[MAX_PAGESIZE * NUM_METAS]={0};
+	// memcpy(tmp, p, psize * NUM_METAS);
+	DO_PWRITE(rc, env->me_fd, p, psize * NUM_METAS, len, 0);
 #ifdef _DEBUG_SMDB
 	printf("[lmdb] psize*NUM_METAS=%d, len=%d\n", psize * NUM_METAS, len);
 #endif
@@ -3972,6 +3972,7 @@ int ESECT
 mdb_env_create(MDB_env **env)
 {
 	MDB_env *e;
+
 	e = calloc(1, sizeof(MDB_env));
 #ifdef _sDM_
 	printf("[lmdb]sDM define\n");
@@ -4086,6 +4087,7 @@ mdb_env_map(MDB_env *env, void *addr)
 	p = (MDB_page *)env->me_map;
 	env->me_metas[0] = METADATA(p);
 	env->me_metas[1] = (MDB_meta *)((char *)env->me_metas[0] + env->me_psize);
+
 #ifdef _DEBUG_SMDB
 	printf("[lmdb]mdb_env_map, 0=%ld, 1=%ld\n",env->me_metas[0]->mm_last_pg, env->me_metas[1]->mm_last_pg);
 #endif
@@ -4323,10 +4325,9 @@ mdb_fopen(const MDB_env *env, MDB_name *fname,
 	}
 	fd = CreateFileW(fname->mn_val, acc, share, NULL, disp, attrs, NULL);
 #else
-		char tmp[MAXPATHLEN] = {0};
-		strcpy(tmp, fname->mn_val);
-		fd = open(tmp, which & MDB_O_MASK, mode);
-		// fd = open(fname->mn_val, which & MDB_O_MASK, mode);
+		// char tmp[MAXPATHLEN] = {0};
+		// strcpy(tmp, fname->mn_val);
+	fd = open(fname->mn_val, which & MDB_O_MASK, mode);
 #endif
 
 	if (fd == INVALID_HANDLE_VALUE)
@@ -4473,6 +4474,7 @@ mdb_env_open2(MDB_env *env)
 			return rc;
 		newenv = 0;
 	}
+
 	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta.mm_address : NULL);
 	if (rc)
 		return rc;
@@ -7025,6 +7027,7 @@ new_sub:
 			}
 		}
 	}
+
 	if (rc == MDB_SUCCESS) {
 		/* Now store the actual data in the child DB. Note that we're
 		 * storing the user data in the keys field, so there are strict

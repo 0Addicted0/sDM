@@ -15,7 +15,7 @@ int main()
     MDB_cursor *cursor;
 
     //init lmdb
-    printf("lmdb version:%s\n",mdb_version(0, 0, 0));
+    // printf("lmdb version:%s\n",mdb_version(0, 0, 0));
 
     res = mdb_env_create(&env);
     if(res){
@@ -47,12 +47,12 @@ int main()
     }
     //
     //write to mem
-    int count=10;
+    int count=1000;
     int value=0;
 
     int i=0;
     for(;i<count;++i){
-        value=(i<<1)*i+1;
+        value=i+1;
 
         key.mv_size =sizeof(i);
         key.mv_data =(void*)&i;
@@ -62,12 +62,12 @@ int main()
         res = mdb_put(txn, dbi, &key, &data, 0);
         if(res!=0)
         {
-            printf("mdb_put error,res=%d, detail:%s",res,mdb_strerror(res));
+            printf("mdb_put error,res=%d, detail:%s\n",res,mdb_strerror(res));
             break;
         }
         else 
         {
-            printf("[S]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
+            // printf("[S]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
         }
     }
     // read from mem
@@ -80,12 +80,12 @@ int main()
         res = mdb_get(txn, dbi, &key, &data);
         if(res!=0)
         {
-            printf("mdb_put error,res=%d, detail:%s",res,mdb_strerror(res));
+            printf("mdb_get error,res=%d, detail:%s(key=%d)\n",res,mdb_strerror(res),*(int *)key.mv_data);
             break;
         }
         else 
         {
-            printf("[L]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
+            // printf("[L]key:%d -> value:%d\n",*(int *)key.mv_data,*(int *)data.mv_data);
         }
     }
     /* 

@@ -244,7 +244,15 @@ namespace gem5
                                                                  onchip_cache_latency(params.onchip_cache_latency),
                                                                  dram_cache_size(params.dram_cache_size),
                                                                  remoteMemAccessLatency(params.remote_mem_latency),
-                                                                 localMemAccessLatency(params.local_mem_latency)
+                                                                 localMemAccessLatency(params.local_mem_latency),
+                                                                 addr_translate_cache_size(params.addr_trans_cache_size),
+                                                                 addr_translate_cache_mode(params.addr_trans_cache_mode),
+                                                                 addr_translate_cache_tagLatency(params.addr_trans_cache_taglat),
+                                                                 hot_page_cache_size(params.hot_page_cache_size),
+                                                                 hot_page_cache_ctr_filter_size(params.hot_page_cache_ctr_filter_size),
+                                                                 hot_page_cache_backup_size(params.hot_page_cache_backup_size),
+                                                                 hot_page_cache_threshold(params.hot_page_cache_threshold)
+
         {
             // has_recv = false;
             // pkt_recv = NULL;
@@ -280,7 +288,8 @@ namespace gem5
             printf("+-----------------------------------+\n");
             printf("|dram_cache_size     (Bytes)=%7ld|\n", dram_cache_size * CL_SIZE);
             printf("|onchip_cache_size   (Bytes)=%7ld|\n", onchip_cache_size * CL_SIZE);
-            printf("|addr_cache_size     (Bytes)=%7ld|\n", onchip_cache_size * CL_SIZE);
+            printf("|addr_cache_size     (Bytes)=%7ld|\n", addr_translate_cache_size * CL_SIZE);
+            printf("|hot_page_cache_size (Bytes)=%7ld|\n", hot_page_cache_size * (sDM_PAGE_SIZE >> 1));
             printf("|hash_latency        (Cycle)=%7d|\n", params.hash_latency);
             printf("|encrypt_latency     (Cycle)=%7d|\n", params.encrypt_latency);
             printf("|onchip_cache_latency(Cycle)=%7d|\n", params.onchip_cache_latency);
@@ -290,12 +299,12 @@ namespace gem5
             sdm_space_cnt = sdm_dropped_cnt = 0;
             sdm_table.assign(1, sdm_space());
             isHotPageenable = true;
-            KeypathCache = new sDMKeypathCache(this, onchip_cache_size, dram_cache_size,
-                                               onchip_cache_latency, localMemAccessLatency, remoteMemAccessLatency);
-            HotPageCache = new sDMLFUCache(this, onchip_cache_size, sDM_PAGE_SIZE >> 1, 128, 2, 128);
-            addrCache = new sDMAddrCache(this, onchip_cache_size, _LRU, 0);
+            KeypathCache = new sDMKeypathCache(this, onchip_cache_size, dram_cache_size, onchip_cache_latency, localMemAccessLatency, remoteMemAccessLatency);
+            HotPageCache = new sDMLFUCache(this, hot_page_cache_size, (sDM_PAGE_SIZE >> 1), hot_page_cache_ctr_filter_size, hot_page_cache_threshold, hot_page_cache_backup_size);
+            addrCache = new sDMAddrCache(this, addr_translate_cache_size, addr_translate_cache_mode, addr_translate_cache_tagLatency);
             lstat = new sDMstat("local_mem_stat");
             rstat = new sDMstat("remote_mem_stat");
+            _daddrhits = 0;
         }
         sDMmanager::~sDMmanager()
         {
@@ -930,6 +939,8 @@ namespace gem5
 
             if (sdm_dropped_cnt == sdm_space_cnt)
                 summary();
+            else 
+                printf("sdm_space_cnt=%ld, sdm_dropped_cnt=%ld\n", sdm_space_cnt, sdm_dropped_cnt);
             return true;
         }
         /**
@@ -1209,8 +1220,7 @@ namespace gem5
                 return;
             // 开启统计
             // printf("start timer read[0x%lx:0x%lx]\n",pkt->getAddr(),pkt->getAddr()+pkt->getSize()-1);
-            lstat->start();
-            rstat->start();
+            timer();
             // 这个assert转移到上层函数abstract_mem.cc的access函数中检查
             // assert((pkt->getSize() == CL_SIZE) && "read:packet size isn't aligned with cache line");
             Addr rva;
@@ -1261,8 +1271,7 @@ namespace gem5
             if (id == 0) // 无需修改任何数据包
                 return;
             // 开启统计
-            lstat->start();
-            rstat->start();
+            timer();
             Addr rva; // 该地址在所属空间中的相对偏移
             int h;
             Addr keyPathAddr[MAX_HEIGHT] = {0};
@@ -1401,6 +1410,7 @@ namespace gem5
 
         void sDMmanager::timer()
         {
+            _daddrhits = addrCache->_hits;
             lstat->start();
             rstat->start();
         }
@@ -1424,11 +1434,16 @@ namespace gem5
             uint64_t remote_dw, remote_dr, remote_dL1, remote_dL2, remote_denc, remote_ddec;
             uint64_t dhash = CME::HMAC_COUNTER - lstat->_dhash;
             uint64_t dhotp, drhotp;
+            uint64_t daddrhits = addrCache->_hits - _daddrhits;
             // 获取访存与访缓存次数
             lstat->end(local_dw, local_dr, local_dL1, local_dL2, local_denc, local_ddec, dhotp);
             rstat->end(remote_dw, remote_dr, remote_dL1, remote_dL2, remote_denc, remote_ddec, drhotp);
             // 计算延迟
-            uint64_t latency = formula(local_dL1, local_dL2, (local_dw + local_dr + dhotp), (remote_dw + remote_dr), (local_denc + local_ddec), dhash);
+            uint64_t latency = formula((local_dL1 + daddrhits), // 附加addrCache hit的时延 
+                                        local_dL2, 
+                                        (local_dw + local_dr + dhotp), 
+                                        (remote_dw + remote_dr), 
+                                        (local_denc + local_ddec), dhash);
             // KeypathCache->L1Cache->latency * local_dL1 + KeypathCache->L2Cache->latency * local_dL2 + // 本地命中
             //                    localMemAccessLatency * (local_dw + local_dr) +
             //                    remoteMemAccessLatency * (remote_dw + remote_dr) +

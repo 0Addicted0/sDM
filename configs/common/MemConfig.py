@@ -241,6 +241,7 @@ def config_mem(options, system):
                 # Create the controller that will drive the interface
                 mem_ctrl = dram_intf.controller()
 
+                # to simulate remote memory, we set the latency of the memory controller
                 if(range_iter == 1):
                     # the first iteration is remote memory
                     # here we set the latency of the memory controller
