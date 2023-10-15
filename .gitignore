@@ -40,3 +40,4 @@ err.txt
 /tests/x86_lmdb/build/
 /tests/x86_lmdb/tests/db/
 /tests/x86_lmdb/tests/*.o
+/env.sh

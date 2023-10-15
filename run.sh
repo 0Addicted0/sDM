@@ -63,12 +63,13 @@ build/X86/gem5.opt \
     --lmem_lat=150 --rmem_lat=600 \
     --sDMenable=true --fast_mode=1 \
     --hash_lat=20 --enc_lat=20 \
-    --onchip_cache_size=16 --onchip_cache_lat=16 --dram_cache_size=256 \
+    --onchip_cache_size=4 --onchip_cache_lat=16 --dram_cache_size=256 \
     --addr_cache_size=32 --addr_cache_mode=0 --addr_cache_taglat=0 \
-    --hot_page_cache_size=0 --hot_page_cache_ctr_filter_size=128 --hot_page_cache_backup_size=16 --hot_page_cache_threshold=2 \
+    --hot_page_cache_size=4 --hot_page_cache_ctr_filter_size=128 --hot_page_cache_backup_size=16 --hot_page_cache_threshold=2 \
     --cpu-type=TimingSimpleCPU \
-    --env="$env_file" \
-    --cmd="$test_dir/x86_lmdb/tests/test.o"
+    --cmd="$test_dir/malloctest/aes"
+    # --env="$env_file" \
+    # --cmd="$test_dir/x86_lmdb/tests/test.o"
 # --cmd="$test_dir/malloctest/$pname"
 # $test_dir/malloctest/aes.o
 # $test_dir/x86_lmdb/tests/hello.o
